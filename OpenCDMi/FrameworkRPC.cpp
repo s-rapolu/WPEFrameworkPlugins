@@ -161,7 +161,7 @@ namespace Plugin {
             };
 
             // IMediaKeys defines the MediaKeys interface.
-            class SessionImplementation : public ::OCDM::ISession {
+            class SessionImplementation : public ::OCDM::ISession, public ::OCDM::ISessionExt {
             private:
                 SessionImplementation() = delete;
                 SessionImplementation(const SessionImplementation&) = delete;
@@ -356,6 +356,7 @@ namespace Plugin {
                     , _keySystem(keySystem)
                     , _sessionId(mediaKeySession->GetSessionId())
                     , _mediaKeySession(mediaKeySession)
+                    , _mediaKeySessionExt(dynamic_cast<CDMi::IMediaKeySessionExt*>(mediaKeySession))
                     , _sink(this, callback)
                     , _buffer(new DataExchange(mediaKeySession, bufferName, defaultSize))
                     , _cencData(*sessionData)
@@ -441,8 +442,13 @@ namespace Plugin {
                     _sink.Revoke(callback);
                 }
 
+                virtual uint32_t SessionIdExt() const override {
+                    return _mediaKeySessionExt->GetSessionIdExt();
+                }
+
                 BEGIN_INTERFACE_MAP(Session)
                 INTERFACE_ENTRY(::OCDM::ISession)
+                    INTERFACE_RELAY(::OCDM::ISession, _mediaKeySessionExt)
                 END_INTERFACE_MAP
 
                 void ReportKeyIds(::OCDM::IAccessorOCDM::INotification* callback) const
@@ -492,6 +498,7 @@ namespace Plugin {
                 std::string _keySystem;
                 std::string _sessionId;
                 CDMi::IMediaKeySession* _mediaKeySession;
+                CDMi::IMediaKeySessionExt* _mediaKeySessionExt;
                 Core::Sink<Sink> _sink;
                 DataExchange* _buffer;
                 CommonEncryptionData _cencData;
