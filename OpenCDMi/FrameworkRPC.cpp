@@ -178,6 +178,7 @@ namespace Plugin {
                         : ::OCDM::DataExchange(name, defaultSize)
                         , Core::Thread(Core::Thread::DefaultStackSize(), _T("DRMSessionThread"))
                         , _mediaKeys(mediaKeys)
+                        , _mediaKeysExt(dynamic_cast<CDMi::IMediaKeySessionExt*>(mediaKeys))
                         , _sessionKey(nullptr)
                         , _sessionKeyLength(0)
                     {
@@ -250,6 +251,7 @@ namespace Plugin {
 
                 private:
                     CDMi::IMediaKeySession* _mediaKeys;
+                    CDMi::IMediaKeySessionExt* _mediaKeysExt;
                     uint8_t* _sessionKey;
                     uint32_t _sessionKeyLength;
                 };
@@ -865,6 +867,17 @@ namespace Plugin {
                 return _systemExt->CommitSecureStop(sessionID, sessionIDLength, serverResponse, serverResponseLength);
             }
 
+            OCDM::OCDM_RESULT CreateSystemNetflix(
+                            const std::string& readDir,
+                            const std::string& storeLocation) override
+            {
+                return _systemExt->CreateSystemNetflix(readDir, storeLocation);
+            }
+
+            OCDM::OCDM_RESULT InitSystemNetflix() override
+            {
+                return _systemExt->InitSystemNetflix();
+            }
 
             virtual void Register (::OCDM::IAccessorOCDM::INotification* callback) override {
 
