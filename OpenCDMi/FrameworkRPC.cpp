@@ -947,6 +947,24 @@ namespace Plugin {
                 return ::OCDM::OCDM_RESULT::OCDM_S_FALSE;
             }
 
+            OCDM::OCDM_RESULT TeardownSystemNetflix() override
+            {
+                return _systemExt->TeardownSystemNetflix();
+            }
+
+            OCDM::OCDM_RESULT DeleteSecureStore() override
+            {
+                return _systemExt->DeleteSecureStore();
+            }
+
+            OCDM::OCDM_RESULT GetSecureStoreHash(
+                    uint8_t secureStoreHash[],
+                    uint32_t secureStoreHashLength)
+            {
+                return _systemExt->GetSecureStoreHash(secureStoreHash, secureStoreHashLength);
+            }
+
+
             virtual void Register (::OCDM::IAccessorOCDM::INotification* callback) override {
 
                 _adminLock.Lock();
