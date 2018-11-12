@@ -36,8 +36,6 @@ add_library(${MODULE_NAME} SHARED
     Module.cpp
     WebKitBrowser.cpp
     WebKitImplementation.cpp
-    InjectedBundle/WhiteListedOriginDomainsList.cpp
-    InjectedBundle/Utils.cpp
 )
 
 set_target_properties(${MODULE_NAME} PROPERTIES

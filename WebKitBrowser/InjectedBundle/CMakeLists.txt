@@ -5,12 +5,6 @@ find_package(${NAMESPACE}Plugins REQUIRED)
 
 add_library(${MODULE_NAME} SHARED 
     main.cpp
-    WhiteListedOriginDomainsList.cpp
-    Utils.cpp
-    JavaScriptFunction.cpp
-    NotifyWPEFramework.cpp
-    Milestone.cpp
-    ClassDefinition.cpp
 )
 
 set_target_properties(${MODULE_NAME} PROPERTIES

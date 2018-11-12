@@ -1,21 +1,12 @@
 #include "Module.h"
 
-#include <WPE/WebKit.h>
+#include <wpe/webkit-web-extension.h>
 
 #include <cstdio>
 #include <memory>
 #include <syslog.h>
 
-#include "ClassDefinition.h"
-#include "NotifyWPEFramework.h"
-#include "Utils.h"
-#include "WhiteListedOriginDomainsList.h"
-
 using namespace WPEFramework;
-using JavaScript::ClassDefinition;
-using WebKit::WhiteListedOriginDomainsList;
-
-WKBundleRef g_Bundle;
 
 static Core::NodeId GetConnectionNode()
 {
@@ -43,7 +34,7 @@ public:
     }
 
 public:
-    void Initialize(WKBundleRef bundle)
+    void Initialize(WebKitWebExtension* extension, GVariant* userData)
     {
 
         Trace::TraceType<Trace::Information, &Core::System::MODULE_NAME>::Enable(true);
@@ -56,9 +47,19 @@ public:
             _comClient.Release();
         }
 
-        _bundle = bundle;
+        _extension = WEBKIT_WEB_EXTENSION(g_object_ref(extension));
 
-        _whiteListedOriginDomainPairs = WhiteListedOriginDomainsList::RequestFromWPEFramework(bundle);
+        const char* uid;
+        const char* whitelist;
+        g_variant_get(userData, "(&sm&s)", &uid, &whitelist);
+
+        _scriptWorld = webkit_script_world_new_with_name(uid);
+        g_signal_connect(_scriptWorld, "window-object-cleared", G_CALLBACK (windowObjectClearedCallback), nullptr);
+
+        g_signal_connect(extension, "page-created", G_CALLBACK(pageCreatedCallback), this);
+
+        if (whitelist)
+            addOriginAccessWhiteList(whitelist);
     }
 
     void Deinitialize()
@@ -67,165 +68,60 @@ public:
             _comClient.Release();
         }
 
+        g_object_unref(_scriptWorld);
+        g_object_unref(_extension);
+
         Core::Singleton::Dispose();
     }
 
-    void WhiteList(WKBundleRef bundle)
-    {
-
-        // Whitelist origin/domain pairs for CORS, if set.
-        if (_whiteListedOriginDomainPairs) {
-            _whiteListedOriginDomainPairs->AddWhiteListToWebKit(bundle);
-        }
-    }
-
 private:
-    Core::ProxyType<RPC::CommunicatorClient> _comClient;
-
-    // White list for CORS.
-    std::unique_ptr<WhiteListedOriginDomainsList> _whiteListedOriginDomainPairs;
-
-    // Handle of bundle.
-    WKBundleRef _bundle;
-
-} _wpeFrameworkClient;
-
-extern "C" {
-
-__attribute__((destructor)) static void unload()
-{
-    _wpeFrameworkClient.Deinitialize();
-}
-
-// Adds class to JS world.
-void InjectInJSWorld(ClassDefinition& classDef, WKBundleFrameRef frame, WKBundleScriptWorldRef scriptWorld)
-{
-    // @Zan: for how long should "ClassDefinition.staticFunctions" remain valid? Can it be
-    // released after "JSClassCreate"?
-
-    JSGlobalContextRef context = WKBundleFrameGetJavaScriptContextForWorld(frame, scriptWorld);
-
-    ClassDefinition::FunctionIterator function = classDef.GetFunctions();
-    uint32_t functionCount = function.Count();
-
-    // We need an extra entry that we set to all zeroes, to signal end of data.
-    // TODO: memleak.
-    JSStaticFunction* staticFunctions = new JSStaticFunction[functionCount + 1];
-
-    int index = 0;
-    while (function.Next()) {
-        staticFunctions[index++] = (*function)->BuildJSStaticFunction();
+    static void automationMilestone(const char* arg1, const char* arg2, const char* arg3)
+    {
+        g_printerr("TEST TRACE: \"%s\" \"%s\" \"%s\"\n", arg1, arg2, arg3);
+        TRACE_GLOBAL(Trace::Information, (_T("TEST TRACE: \"%s\" \"%s\" \"%s\""), arg1, arg2, arg3));
     }
 
-    staticFunctions[functionCount] = { nullptr, nullptr, 0 };
+    static void windowObjectClearedCallback(WebKitScriptWorld* world, WebKitWebPage*, WebKitFrame* frame)
+    {
+        if (!webkit_frame_is_main_frame(frame))
+            return;
 
-    // TODO: memleak.
-    JSClassDefinition* JsClassDefinition = new JSClassDefinition{
-        0, // version
-        kJSClassAttributeNone, //attributes
-        classDef.GetClassName().c_str(), // className
-        0, // parentClass
-        nullptr, // staticValues
-        staticFunctions, // staticFunctions
-        nullptr, //initialize
-        nullptr, //finalize
-        nullptr, //hasProperty
-        nullptr, //getProperty
-        nullptr, //setProperty
-        nullptr, //deleteProperty
-        nullptr, //getPropertyNames
-        nullptr, //callAsFunction
-        nullptr, //callAsConstructor
-        nullptr, //hasInstance
-        nullptr, //convertToType
-    };
+        JSCContext* jsContext = webkit_frame_get_js_context_for_script_world(frame, world);
 
-    JSClassRef jsClass = JSClassCreate(JsClassDefinition);
-    JSValueRef jsObject = JSObjectMake(context, jsClass, nullptr);
-    JSClassRelease(jsClass);
+        JSCValue* automation = jsc_value_new_object(jsContext, nullptr, nullptr);
+        JSCValue* function = jsc_value_new_function(jsContext, nullptr, reinterpret_cast<GCallback>(automationMilestone),
+            nullptr, nullptr, G_TYPE_NONE, 3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+        jsc_value_object_set_property(automation, "Milestone", function);
+        g_object_unref(function);
+        jsc_context_set_value(jsContext, "automation", automation);
+        g_object_unref(automation);
 
-    // @Zan: can we make extension name same as ClassName?
-    JSStringRef extensionString = JSStringCreateWithUTF8CString(classDef.GetExtName().c_str());
-    JSObjectSetProperty(context, JSContextGetGlobalObject(context), extensionString, jsObject,
-        kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete, nullptr);
-    JSStringRelease(extensionString);
-}
+        static const char wpeNotifyWPEFramework[] = "var wpe = {};\n"
+            "wpe.NotifyWPEFramework = function() {\n"
+            "  let retval = new Array;\n"
+            "  for (let i = 0; i < arguments.length; i++) {\n"
+            "    retval[i] = arguments[i];\n"
+            "  }\n"
+            "  window.webkit.messageHandlers.wpeNotifyWPEFramework.postMessage(retval);\n"
+            "}";
+        JSCValue* result = jsc_context_evaluate(jsContext, wpeNotifyWPEFramework, -1);
+        g_object_unref(result);
 
-static WKBundlePageLoaderClientV6 s_pageLoaderClient = {
-    { 6, nullptr },
-    nullptr, // didStartProvisionalLoadForFrame
-    nullptr, // didReceiveServerRedirectForProvisionalLoadForFrame
-    nullptr, // didFailProvisionalLoadWithErrorForFrame
-    nullptr, // didCommitLoadForFrame
-    nullptr, // didFinishDocumentLoadForFrame
-    nullptr, // didFinishLoadForFrame
-    nullptr, // didFailLoadWithErrorForFrame
-    nullptr, // didSameDocumentNavigationForFrame
-    nullptr, // didReceiveTitleForFrame
-    nullptr, // didFirstLayoutForFrame
-    nullptr, // didFirstVisuallyNonEmptyLayoutForFrame
-    nullptr, // didRemoveFrameFromHierarchy
-    nullptr, // didDisplayInsecureContentForFrame
-    nullptr, // didRunInsecureContentForFrame
-    // didClearWindowObjectForFrame
-    [](WKBundlePageRef, WKBundleFrameRef frame, WKBundleScriptWorldRef scriptWorld, const void*) {
-        // Add JS classes to JS world.
-        ClassDefinition::Iterator ite = ClassDefinition::GetClassDefinitions();
-        while (ite.Next()) {
-            InjectInJSWorld(*ite, frame, scriptWorld);
-        }
-    },
-    nullptr, // didCancelClientRedirectForFrame
-    nullptr, // willPerformClientRedirectForFrame
-    nullptr, // didHandleOnloadEventsForFrame
-    nullptr, // didLayoutForFrame
-    nullptr, // didNewFirstVisuallyNonEmptyLayout_unavailable
-    nullptr, // didDetectXSSForFrame
-    nullptr, // shouldGoToBackForwardListItem
-    nullptr, // globalObjectIsAvailableForFrame
-    nullptr, // willDisconnectDOMWindowExtensionFromGlobalObject
-    nullptr, // didReconnectDOMWindowExtensionToGlobalObject
-    nullptr, // willDestroyGlobalObjectForDOMWindowExtension
-    nullptr, // didFinishProgress
-    nullptr, // shouldForceUniversalAccessFromLocalURL
-    nullptr, // didReceiveIntentForFrame_unavailable
-    nullptr, // registerIntentServiceForFrame_unavailable
-    nullptr, // didLayout
-    nullptr, // featuresUsedInPage
-    nullptr, // willLoadURLRequest
-    nullptr, // willLoadDataRequest
-};
+        g_object_unref(jsContext);
+    }
 
-static WKBundlePageUIClientV4 s_pageUIClient = {
-    { 4, nullptr },
-    nullptr, // willAddMessageToConsole
-    nullptr, // willSetStatusbarText
-    nullptr, // willRunJavaScriptAlert
-    nullptr, // willRunJavaScriptConfirm
-    nullptr, // willRunJavaScriptPrompt
-    nullptr, // mouseDidMoveOverElement
-    nullptr, // pageDidScroll
-    nullptr, // unused1
-    nullptr, // shouldGenerateFileForUpload
-    nullptr, // generateFileForUpload
-    nullptr, // unused2
-    nullptr, // statusBarIsVisible
-    nullptr, // menuBarIsVisible
-    nullptr, // toolbarsAreVisible
-    nullptr, // didReachApplicationCacheOriginQuota
-    nullptr, // didExceedDatabaseQuota
-    nullptr, // createPlugInStartLabelTitle
-    nullptr, // createPlugInStartLabelSubtitle
-    nullptr, // createPlugInExtraStyleSheet
-    nullptr, // createPlugInExtraScript
-    nullptr, // unused3
-    nullptr, // unused4
-    nullptr, // unused5
-    nullptr, // didClickAutoFillButton
-    //willAddDetailedMessageToConsole
-    [](WKBundlePageRef page, WKConsoleMessageSource source, WKConsoleMessageLevel level, WKStringRef message, uint32_t lineNumber,
-        uint32_t columnNumber, WKStringRef url, const void* clientInfo) {
-        string messageString = WebKit::Utils::WKStringToString(message);
+    static void pageCreatedCallback(WebKitWebExtension*, WebKitWebPage* page, PluginHost* host)
+    {
+        // Enforce the creation of the script world global context in the main frame.
+        JSCContext* jsContext = webkit_frame_get_js_context_for_script_world(webkit_web_page_get_main_frame(page), host->_scriptWorld);
+        g_object_unref(jsContext);
+
+        g_signal_connect(page, "console-message-sent", G_CALLBACK(consoleMessageSentCallback), nullptr);
+    }
+
+    static void consoleMessageSentCallback(WebKitWebPage* page, WebKitConsoleMessage* message)
+    {
+        string messageString = Core::ToString(webkit_console_message_get_text(message));
 
         const uint16_t maxStringLength = Trace::TRACINGBUFFERSIZE - 1;
         if (messageString.length() > maxStringLength) {
@@ -235,35 +131,84 @@ static WKBundlePageUIClientV4 s_pageUIClient = {
         // TODO: use "Trace" classes for different levels.
         TRACE_GLOBAL(Trace::Information, (messageString));
     }
-};
 
-static WKBundleClientV1 s_bundleClient = {
-    { 1, nullptr },
-    // didCreatePage
-    [](WKBundleRef bundle, WKBundlePageRef page, const void* clientInfo) {
-        // Register page loader client, for javascript callbacks.
-        WKBundlePageSetPageLoaderClient(page, &s_pageLoaderClient.base);
+    void addOriginAccessWhiteList(const char* whitelist)
+    {
+        class JSONEntry : public Core::JSON::Container {
+        private:
+            JSONEntry& operator=(const JSONEntry&) = delete;
 
-        // Register UI client, this one will listen to log messages.
-        WKBundlePageSetUIClient(page, &s_pageUIClient.base);
+        public:
+            JSONEntry()
+                : Core::JSON::Container()
+                , Origin()
+                , Domain()
+                , SubDomain(true)
+            {
+                Add(_T("origin"), &Origin);
+                Add(_T("domain"), &Domain);
+                Add(_T("subdomain"), &SubDomain);
+            }
 
-        _wpeFrameworkClient.WhiteList(bundle);
-    },
-    nullptr, // willDestroyPage
-    nullptr, // didInitializePageGroup
-    nullptr, // didReceiveMessage
-    nullptr, // didReceiveMessageToPage
-};
+            JSONEntry(const JSONEntry& rhs)
+                : Core::JSON::Container()
+                , Origin(rhs.Origin)
+                , Domain(rhs.Domain)
+                , SubDomain(rhs.SubDomain)
+            {
+                Add(_T("origin"), &Origin);
+                Add(_T("domain"), &Domain);
+                Add(_T("subdomain"), &SubDomain);
+            }
+
+        public:
+            Core::JSON::String Origin;
+            Core::JSON::ArrayType<Core::JSON::String> Domain;
+            Core::JSON::Boolean SubDomain;
+        };
+
+        Core::JSON::ArrayType<JSONEntry> entries;
+        entries.FromString(Core::ToString(whitelist));
+        Core::JSON::ArrayType<JSONEntry>::Iterator originIndex(entries.Elements());
+
+        while (originIndex.Next() == true) {
+            if ((originIndex.Current().Origin.IsSet() == true) && (originIndex.Current().Domain.IsSet() == true)) {
+                WebKitSecurityOrigin* origin = webkit_security_origin_new_for_uri(originIndex.Current().Origin.Value().c_str());
+                gboolean allowSubdomains = originIndex.Current().SubDomain.Value();
+
+                Core::JSON::ArrayType<Core::JSON::String>::Iterator domainIndex(originIndex.Current().Domain.Elements());
+                while (domainIndex.Next()) {
+                    WebKitSecurityOrigin* domain = webkit_security_origin_new_for_uri(domainIndex.Current().Value().c_str());
+                    webkit_web_extension_add_origin_access_whitelist_entry(_extension, origin,
+                        webkit_security_origin_get_protocol(domain), webkit_security_origin_get_host(domain),
+                        allowSubdomains);
+                    webkit_security_origin_unref(domain);
+                    TRACE_L1("Added origin->domain pair to WebKit white list: %s -> %s", originIndex.Current().Origin.Value().c_str(), domainIndex.Current().Value().c_str());
+                }
+
+                webkit_security_origin_unref(origin);
+            }
+        }
+    }
+
+    Core::ProxyType<RPC::CommunicatorClient> _comClient;
+
+    WebKitWebExtension* _extension;
+    WebKitScriptWorld* _scriptWorld;
+} _wpeFrameworkClient;
+
+extern "C" {
+
+__attribute__((destructor)) static void unload()
+{
+    _wpeFrameworkClient.Deinitialize();
+}
 
 // Declare module name for tracer.
 MODULE_NAME_DECLARATION(BUILD_REFERENCE)
 
-void WKBundleInitialize(WKBundleRef bundle, WKTypeRef)
+G_MODULE_EXPORT void webkit_web_extension_initialize_with_user_data(WebKitWebExtension* extension, GVariant* userData)
 {
-    g_Bundle = bundle;
-
-    _wpeFrameworkClient.Initialize(bundle);
-
-    WKBundleSetClient(bundle, &s_bundleClient.base);
+    _wpeFrameworkClient.Initialize(extension, userData);
 }
 }
