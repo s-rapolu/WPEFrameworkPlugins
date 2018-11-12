@@ -5,12 +5,6 @@ message("Setting up ${PLUGIN_NAME}")
 
 set(PLUGIN_SOURCES
     main.cpp
-    WhiteListedOriginDomainsList.cpp
-    Utils.cpp
-    JavaScriptFunction.cpp
-    NotifyWPEFramework.cpp
-    Milestone.cpp
-    ClassDefinition.cpp
 )
 
 # Library definition section

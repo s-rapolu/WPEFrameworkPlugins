@@ -46,8 +46,6 @@ set(PLUGIN_SOURCES
     Module.cpp
     WebKitBrowser.cpp
     WebKitImplementation.cpp
-    InjectedBundle/WhiteListedOriginDomainsList.cpp
-    InjectedBundle/Utils.cpp
 )
 
 file(GLOB PLUGIN_INCLUDES *.h)
