@@ -1,0 +1,21 @@
+{
+ "locator":"libWPEFrameworkSystemCommand.so",
+ "classname":"SystemCommand",
+ "precondition":[
+  "Platform"
+ ],
+ "autostart":true,
+ "configuration":{
+  "defaultparams":[
+   {
+    "command":"USBReset",
+    "params":[
+     {
+      "name":"device",
+      "value":"/dev/bus/usb/001/001"
+     }
+    ]
+   }
+  ]
+ }
+}
