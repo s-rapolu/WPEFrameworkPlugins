@@ -8,49 +8,62 @@ namespace Plugin {
 
     class MallocDummy : public PluginHost::IPlugin, public PluginHost::IWeb {
     public:
-        class MallocDummyData : public Core::JSON::Container {
+        class Data : public Core::JSON::Container {
+        public:
+            class MemoryInfo : public Core::JSON::Container {
+            private:
+                MemoryInfo(const MemoryInfo&) = delete;
+                MemoryInfo& operator=(const MemoryInfo&) = delete;
+
+            public:
+                MemoryInfo()
+                    : Core::JSON::Container()
+                    , CurrentAllocation(0)
+                {
+                    Add(_T("allocatedMemory"), &CurrentAllocation);
+                }
+                ~MemoryInfo()
+                {
+                }
+
+            public:
+                Core::JSON::DecUInt64 CurrentAllocation;
+            };
+
 
         private:
-            MallocDummyData(const MallocDummyData&) = delete;
-            MallocDummyData& operator=(const MallocDummyData&) = delete;
+            Data(const Data&) = delete;
+            Data& operator=(const Data&) = delete;
 
         public:
-            MallocDummyData()
+            Data()
                 : Core::JSON::Container()
-                , SampleConfigData("Default data")
+                , Memory()
             {
-                Add(_T("sampleData"), &SampleConfigData);
+                Add(_T("memoryInfo"), &Memory);
             }
 
-            virtual ~MallocDummyData()
+            virtual ~Data()
             {
             }
 
         public:
-            Core::JSON::String SampleConfigData;
+            MemoryInfo Memory;
         };
 
-    private:
-        MallocDummy(const MallocDummy&) = delete;
-        MallocDummy& operator=(const MallocDummy&) = delete;
-
-    public:
         MallocDummy()
             : _service(nullptr)
             , _pluginName("MallocDummy")
-        {
-        }
+            , _skipURL(0)
+            , _currentMemoryAllocation(100) { }
 
-        virtual ~MallocDummy()
-        {
-        }
+        virtual ~MallocDummy() { }
 
         BEGIN_INTERFACE_MAP(MallocDummy)
             INTERFACE_ENTRY(PluginHost::IPlugin)
             INTERFACE_ENTRY(PluginHost::IWeb)
         END_INTERFACE_MAP
 
-    public:
         //   IPlugin methods
         // -------------------------------------------------------------------------------------------------------
         virtual const string Initialize(PluginHost::IShell* service) override;
@@ -63,12 +76,15 @@ namespace Plugin {
         virtual Core::ProxyType<Web::Response> Process(const Web::Request& request);
 
     private:
-        string GetPluginName() const;
-        void DisplayAppConfigConfig(MallocDummyData & config);
+        MallocDummy(const MallocDummy&) = delete;
+        MallocDummy& operator=(const MallocDummy&) = delete;
 
-    private:
+        void GetMemoryInfo(Data::MemoryInfo& memoryInfo);
+
         PluginHost::IShell* _service;
         string _pluginName;
+        uint8_t _skipURL;
+        uint64_t _currentMemoryAllocation;
     };
 
 } // namespace Plugin
