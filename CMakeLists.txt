@@ -27,6 +27,7 @@ option(WPEFRAMEWORK_PLUGIN_WEBSERVER "Include WebServer plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_WEBSHELL "Include WebShell plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_TVCONTROL "Include TVControl plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_WIFICONTROL "Include WifiControl plugin" OFF)
+option(WPEFRAMEWORK_PLUGIN_MALLOCDUMMY "Include MallocDummy plugin" OFF)
 
 # This contains all kinds of plugins (publicely available, so they all need the plugin support library !!
 find_package(Plugins REQUIRED)
@@ -151,4 +152,8 @@ endif()
 
 if(WPEFRAMEWORK_PLUGIN_RTSPCLIENT)
     add_subdirectory(RtspClient)
+endif()
+
+if(WPEFRAMEWORK_PLUGIN_MALLOCDUMMY)
+    add_subdirectory(MallocDummy)
 endif()
