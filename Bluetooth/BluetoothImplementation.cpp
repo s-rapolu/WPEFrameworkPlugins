@@ -375,7 +375,7 @@ namespace Plugin {
             {
                 size_t position = line.find("device");
                 if (position != std::string::npos) {
-                    if (!_connected.empty()
+                    if (!_connected.empty())
                         line.replace(position, line.length() - position, "device \"" + _connected + "\"");
                     else
                         line.replace(position, line.length() - position, "device \"00:00:00:00:00:00\"");
