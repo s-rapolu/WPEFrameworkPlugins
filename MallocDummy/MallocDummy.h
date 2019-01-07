@@ -9,6 +9,58 @@ namespace Plugin {
 
     class MallocDummy : public PluginHost::IPlugin, public PluginHost::IWeb {
     public:
+        class Notification : public RPC::IRemoteProcess::INotification {
+        private:
+            Notification() = delete;
+            Notification(const Notification&) = delete;
+
+        public:
+            explicit Notification(MallocDummy* parent)
+                : _parent(*parent)
+            {
+                ASSERT(parent != nullptr);
+            }
+            virtual ~Notification()
+            {
+            }
+
+        public:
+            virtual void Activated(RPC::IRemoteProcess* /* process */)
+            {
+            }
+            virtual void Deactivated(RPC::IRemoteProcess* process)
+            {
+                _parent.Deactivated(process);
+            }
+
+            BEGIN_INTERFACE_MAP(Notification)
+                INTERFACE_ENTRY(RPC::IRemoteProcess::INotification)
+            END_INTERFACE_MAP
+
+        private:
+            MallocDummy& _parent;
+        };
+
+        class Config : public Core::JSON::Container {
+        private:
+            Config(const Config&) = delete;
+            Config& operator=(const Config&) = delete;
+
+        public:
+            Config()
+                : Core::JSON::Container()
+                , OutOfProcess(false)
+            {
+                Add(_T("outofprocess"), &OutOfProcess);
+            }
+            ~Config()
+            {
+            }
+
+        public:
+            Core::JSON::Boolean OutOfProcess;
+        };
+
         class Data : public Core::JSON::Container {
         public:
             class MemoryInfo : public Core::JSON::Container {
@@ -55,8 +107,10 @@ namespace Plugin {
         MallocDummy()
             : _service(nullptr)
             , _mallocDummy(nullptr)
+            , _notification(this)
             , _pluginName("MallocDummy")
-            , _skipURL(0) { }
+            , _skipURL(0)
+            , _pid(0) { }
 
         virtual ~MallocDummy() { }
 
@@ -82,11 +136,14 @@ namespace Plugin {
         MallocDummy& operator=(const MallocDummy&) = delete;
 
         void GetMemoryInfo(Data::MemoryInfo& memoryInfo);
+        void Deactivated(RPC::IRemoteProcess* process);
 
         PluginHost::IShell* _service;
         Exchange::IMallocDummy* _mallocDummy;
+        Core::Sink<Notification> _notification;
         string _pluginName;
-        uint8_t _skipURL;
+        uint32_t _skipURL;
+        uint32_t _pid;
     };
 
 } // namespace Plugin

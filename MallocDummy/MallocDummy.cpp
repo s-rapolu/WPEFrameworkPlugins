@@ -13,6 +13,7 @@ namespace WPEFramework
         /* virtual */ const string MallocDummy::Initialize(PluginHost::IShell* service)
         {
             string message;
+            Config config;
 
             ASSERT (_service == nullptr);
             ASSERT(_mallocDummy == nullptr);
@@ -21,10 +22,37 @@ namespace WPEFramework
             _service = service;
             _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
 
-            //ToDo: Based on configuration run it in process or out of process (see TVControl for implementation)
-            _mallocDummy = Core::ServiceAdministrator::Instance().Instantiate<Exchange::IMallocDummy>(Core::Library(), _T("MallocDummyImplementation"), static_cast<uint32_t>(~0));
+            // Register the Process::Notification stuff. The Remote process might die before we get a
+            // change to "register" the sink for these events !!! So do it ahead of instantiation.
+            _service->Register(&_notification);
+
+            config.FromString(_service->ConfigLine());
+            SYSLOG(Trace::Fatal, (_T("*** Out of process flag %d ***"), config.OutOfProcess.Value()))
+            if (config.OutOfProcess.Value())
+            {
+                SYSLOG(Trace::Fatal, (_T("*** Out of process implementation ***")))
+                _mallocDummy = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
+            }
+            else
+            {
+                SYSLOG(Trace::Fatal, (_T("*** In process implementation ***")))
+                _mallocDummy = Core::ServiceAdministrator::Instance().Instantiate<Exchange::IMallocDummy>(Core::Library(), _T("MallocDummyImplementation"), static_cast<uint32_t>(~0));
+            }
+
             if (_mallocDummy == nullptr)
             {
+                RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
+
+                // The process can disappear in the meantime...
+                if (process != nullptr)
+                {
+                    process->Terminate();
+                    process->Release();
+                }
+
+                _service->Unregister(&_notification);
+                _service = nullptr;
+
                 SYSLOG(Trace::Fatal, (_T("*** MallocDummy could not be instantiated ***")))
                 message = _T("MallocDummy could not be instantiated.");
             }
@@ -34,8 +62,6 @@ namespace WPEFramework
             }
 
             SYSLOG(Trace::Fatal, (_T("*** Plugin: [%s] has been started ***"), _pluginName.c_str()))
-
-            // On success return empty, to indicate there is no error text.
             return message;
         }
 
@@ -43,10 +69,23 @@ namespace WPEFramework
         {
             ASSERT (_service == service);
             ASSERT(_mallocDummy != nullptr);
+            ASSERT(_pid);
 
-            SYSLOG(Trace::Fatal, (_T("*** Plugin: [%s] has been finished ***"), _pluginName.c_str()))
+            SYSLOG(Trace::Fatal, (_T("*** OutOfProcess Plugin is not properly destructed. PID: %d ***"), _pid))
+
+            RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
+
+            // The process can disappear in the meantime...
+            if (process != nullptr)
+            {
+                process->Terminate();
+                process->Release();
+            }
+
+            _service->Unregister(&_notification);
             _service = nullptr;
             _mallocDummy = nullptr;
+            SYSLOG(Trace::Fatal, (_T("*** Plugin: [%s] has been finished ***"), _pluginName.c_str()))
         }
 
         /* virtual */ string MallocDummy::Information() const
@@ -132,6 +171,18 @@ namespace WPEFramework
             ASSERT(_mallocDummy != nullptr)
 
             memoryInfo.CurrentAllocation = _mallocDummy->GetAllocatedMemory();
+        }
+
+        void MallocDummy::Deactivated(RPC::IRemoteProcess* process)
+        {
+            // This can potentially be called on a socket thread, so the deactivation (wich in turn kills this object) must be done
+            // on a seperate thread. Also make sure this call-stack can be unwound before we are totally destructed.
+            if (_pid == process->Id()) {
+
+            ASSERT(_service != nullptr);
+
+            PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, PluginHost::IShell::FAILURE));
+            }
         }
 
     } // namespace Plugin
