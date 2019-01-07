@@ -113,7 +113,7 @@ namespace Plugin {
         }
 
         BEGIN_INTERFACE_MAP(RtspClientImplementation)
-        INTERFACE_ENTRY(Exchange::IRtspClient)
+            INTERFACE_ENTRY(Exchange::IRtspClient)
         END_INTERFACE_MAP
 
     private:

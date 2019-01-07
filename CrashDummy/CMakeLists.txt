@@ -7,9 +7,12 @@ set(VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REVISION})
 
 message("Setting up ${PLUGIN_NAME}")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color")
+
 add_library(${PLUGIN_NAME} SHARED
         Module.cpp
-        CrashDummy.cpp)
+        CrashDummy.cpp
+        CrashDummyImplementation.cpp)
 
 
 set_target_properties(${PLUGIN_NAME}
