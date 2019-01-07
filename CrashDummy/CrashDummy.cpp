@@ -87,10 +87,25 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
 
     // Proxy object for response type.
     Core::ProxyType<Web::Response> response(PluginHost::Factories::Instance().Response());
+    Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
 
-    // Default is not allowed.
+    // Default
     response->Message = _T("Method not allowed");
     response->ErrorCode = Web::STATUS_METHOD_NOT_ALLOWED;
+
+    if((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
+        // PUT/POST - /CrashDummy/Crash
+        if(index.Next() && index.Next()) {
+            if(index.Current().Text() == _T("Crash")) {
+                response->Message = _T("Got Crash request");
+                response->ErrorCode = Web::STATUS_OK;
+                ASSERT(_implementation != nullptr)
+                _implementation->Crash();
+            }
+        }
+    } else {
+        TRACE_GLOBAL(Trace::Information, (_T("Request not allowed")));
+    }
 
     return (response);
 }
