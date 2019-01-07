@@ -29,6 +29,7 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
     }
     else {
         TRACE(Trace::Information, ("CrashDummy Plugin initialized %p", _implementation));
+        _implementation->Configure(_shell);
     }
 
     _skipURL = static_cast<uint8_t>(_shell->WebPrefix().length());
