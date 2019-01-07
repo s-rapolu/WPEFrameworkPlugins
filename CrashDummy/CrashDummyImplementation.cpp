@@ -11,17 +11,22 @@ class CrashDummyImplementation
 
 public:
     CrashDummyImplementation()
-    : wtf(0)
-    , _observers(){
+    : _observers(){
 
     };
     virtual ~CrashDummyImplementation() {
 
     };
 
+    /*!
+     * Method that results with SEGFAULT
+    */
     void Crash()
     {
-        TRACE(Trace::Information, (_T("I WILL MAKE A CRASH. TA-DAM!")));
+        TRACE_GLOBAL(Trace::Information, (_T("I WILL MAKE THE CRASH. TA-DAM!")));
+        uint8_t *tmp = NULL;
+        *tmp = 3; // segmentaion fault
+
         return;
     }
 
@@ -32,7 +37,6 @@ public:
 private:
     CrashDummyImplementation(const CrashDummyImplementation&) = delete;
     CrashDummyImplementation& operator=(const CrashDummyImplementation&) = delete;
-    int wtf;
     std::list<PluginHost::IStateControl::INotification*> _observers;
 
 };
