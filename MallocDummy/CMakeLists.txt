@@ -9,7 +9,8 @@ set(PLUGIN_OPTIONS)
 
 set(PLUGIN_SOURCES
         Module.cpp
-        MallocDummy.cpp)
+        MallocDummy.cpp
+        MallocDummyImplementation.cpp)
 
 # Library definition section
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})

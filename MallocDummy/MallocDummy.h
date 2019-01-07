@@ -2,6 +2,7 @@
 #define _MALLOCDUMMY_H
 
 #include "Module.h"
+#include <interfaces/IMallocDummy.h>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -20,7 +21,7 @@ namespace Plugin {
                     : Core::JSON::Container()
                     , CurrentAllocation(0)
                 {
-                    Add(_T("allocatedMemory"), &CurrentAllocation);
+                    Add(_T("memoryAllocation"), &CurrentAllocation);
                 }
                 ~MemoryInfo()
                 {
@@ -53,15 +54,16 @@ namespace Plugin {
 
         MallocDummy()
             : _service(nullptr)
+            , _mallocDummy(nullptr)
             , _pluginName("MallocDummy")
-            , _skipURL(0)
-            , _currentMemoryAllocation(100) { }
+            , _skipURL(0) { }
 
         virtual ~MallocDummy() { }
 
         BEGIN_INTERFACE_MAP(MallocDummy)
             INTERFACE_ENTRY(PluginHost::IPlugin)
             INTERFACE_ENTRY(PluginHost::IWeb)
+            INTERFACE_AGGREGATE(Exchange::IMallocDummy, _mallocDummy)
         END_INTERFACE_MAP
 
         //   IPlugin methods
@@ -82,9 +84,9 @@ namespace Plugin {
         void GetMemoryInfo(Data::MemoryInfo& memoryInfo);
 
         PluginHost::IShell* _service;
+        Exchange::IMallocDummy* _mallocDummy;
         string _pluginName;
         uint8_t _skipURL;
-        uint64_t _currentMemoryAllocation;
     };
 
 } // namespace Plugin
