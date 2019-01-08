@@ -1,9 +1,7 @@
-#ifndef __CRASHDUMMY_H__
-#define __CRASHDUMMY_H__
+#pragma once
 
 #include "Module.h"
 #include <interfaces/ICrashDummy.h>
-
 
 namespace WPEFramework {
 namespace Plugin {
@@ -11,79 +9,81 @@ namespace Plugin {
 class CrashDummy
     : public PluginHost::IPlugin
     , public PluginHost::IWeb {
-    public:
-        CrashDummy()
+
+public:
+    // maximum wait time for process to be spawned
+    static constexpr uint32_t ImplWaitTime = 1000;
+
+public:
+    CrashDummy()
         : _shell(nullptr)
+        , _skipURL(0)
+        , _pid(0)
         , _implementation(nullptr)
         , _notification(this)
-        , _pid(0)
-        , _skipURL(0) {
-        };
+    {
+    }
 
-        ~CrashDummy(){};
+    ~CrashDummy() {}
 
-        void Deactivated(RPC::IRemoteProcess *process);
+private:
+    CrashDummy(const CrashDummy&) = delete;
+    CrashDummy& operator=(const CrashDummy&) = delete;
 
-        // Build QueryInterface implementation, specifying all possible interfaces to be returned.
-        BEGIN_INTERFACE_MAP(CrashDummy)
-            INTERFACE_ENTRY(PluginHost::IPlugin)
-            INTERFACE_ENTRY(PluginHost::IWeb)
-            INTERFACE_AGGREGATE(Exchange::ICrashDummy, _implementation)
-        END_INTERFACE_MAP
+public:
+    void Deactivated(RPC::IRemoteProcess* process);
 
-        class Notification : public RPC::IRemoteProcess::INotification {
+    // Build QueryInterface implementation, specifying all possible interfaces to be returned.
+    BEGIN_INTERFACE_MAP(CrashDummy)
+    INTERFACE_ENTRY(PluginHost::IPlugin)
+    INTERFACE_ENTRY(PluginHost::IWeb)
+    INTERFACE_AGGREGATE(Exchange::ICrashDummy, _implementation)
+    END_INTERFACE_MAP
 
-        private:
-            Notification() = delete;
-            Notification(const Notification&) = delete;
-            Notification& operator=(const Notification&) = delete;
-
-        public:
-            explicit Notification(CrashDummy* parent)
-                : _parent(*parent)
-            {
-                ASSERT(parent != nullptr);
-            }
-            ~Notification()
-            {
-            }
-
-        public:
-            virtual void Activated(RPC::IRemoteProcess*) {
-            }
-            virtual void Deactivated(RPC::IRemoteProcess* process) {
-                _parent.Deactivated(process);
-            }
-
-            BEGIN_INTERFACE_MAP(Notification)
-                INTERFACE_ENTRY(RPC::IRemoteProcess::INotification)
-            END_INTERFACE_MAP
-
-        private:
-            CrashDummy& _parent;
-        };
+private:
+    class Notification : public RPC::IRemoteProcess::INotification {
 
     private:
-        CrashDummy(const CrashDummy&) = delete;
-        CrashDummy& operator=(const CrashDummy&) = delete;
+        Notification() = delete;
+        Notification(const Notification&) = delete;
+        Notification& operator=(const Notification&) = delete;
 
-        PluginHost::IShell* _shell;
-        Exchange::ICrashDummy* _implementation;
-        Core::Sink<Notification> _notification;
-        uint32_t _pid;
-        uint8_t _skipURL;
+    public:
+        explicit Notification(CrashDummy* parent)
+            : _parent(*parent)
+        {
+            ASSERT(parent != nullptr);
+        }
+        ~Notification() {}
 
-    public: // IPugin
-        virtual const string Initialize(PluginHost::IShell* shell) override;
-        virtual void Deinitialize(PluginHost::IShell* shell) override;
-        virtual string Information() const override;
+    public:
+        virtual void Activated(RPC::IRemoteProcess*) override {}
+        virtual void Deactivated(RPC::IRemoteProcess* process) override { _parent.Deactivated(process); }
 
-    public: //IWeb
-        virtual void Inbound(Web::Request& request) override;
-        virtual Core::ProxyType<Web::Response> Process(const Web::Request& request) override;
+        BEGIN_INTERFACE_MAP(Notification)
+        INTERFACE_ENTRY(RPC::IRemoteProcess::INotification)
+        END_INTERFACE_MAP
+
+    private:
+        CrashDummy& _parent;
+    };
+
+private:
+    PluginHost::IShell* _shell;
+    uint8_t _skipURL;
+    uint32_t _pid;
+    Exchange::ICrashDummy* _implementation;
+    Core::Sink<Notification> _notification;
+
+public: // IPugin
+    virtual const string Initialize(PluginHost::IShell* shell) override;
+    virtual void Deinitialize(PluginHost::IShell* shell) override;
+    virtual string Information() const override;
+
+public: // IWeb
+    virtual void Inbound(Web::Request& request) override;
+    virtual Core::ProxyType<Web::Response> Process(const Web::Request& request) override;
 };
 
-} // namespace WPEFramework
 } // namespace Plugin
-
-#endif // __CRASHDUMMY_H__
+} // namespace WPEFramework
