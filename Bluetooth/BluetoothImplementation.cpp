@@ -183,7 +183,6 @@ namespace Plugin {
 
 } /* namespace WPEFramework::Plugin */
 }
-#include "BluetoothImplementation.h"
 
 namespace WPEFramework {
 

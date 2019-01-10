@@ -11,10 +11,16 @@ struct TypeLengthValueType {
     class Request {
     private:
         Request();
-        Request(const Request<TYPE, LENGTH>& copy);
-        Request<TYPE, LENGTH>& operator=(const Request<TYPE, LENGTH>& copy);
+        Request(const Request& copy);
+        Request& operator=(const Request& copy);
 
     protected:
+        inline Request(const uint8_t* value)
+            : _length(0)
+            , _offset(0)
+            , _value(value) {
+            ASSERT(value != nullptr);
+        }
         inline Request(const TYPE& type, const uint8_t* value)
             : _type(type)
             , _length(0)
@@ -53,7 +59,7 @@ struct TypeLengthValueType {
             if (_offset < sizeof(TYPE)) {
                 result += Store(_type, stream, length, _offset);
             }
-            if ((offset < (sizeof(TYPE) + sizeof(LENGTH))) && ((length - result) > 0)) {
+            if ((_offset < (sizeof(TYPE) + sizeof(LENGTH))) && ((length - result) > 0)) {
                 result += Store(_length, &(stream[result]), length-result, _offset - sizeof(TYPE));
             }
             if ((length - result) > 0) {
@@ -72,6 +78,7 @@ struct TypeLengthValueType {
                 ::memcpy (stream, &(_value[_offset]), copyLength);
                 _offset += copyLength;
             }
+
             return (copyLength);
         }
 
@@ -81,6 +88,9 @@ struct TypeLengthValueType {
         }
         inline void Length (const LENGTH length) {
             _length = length;
+        }
+        inline LENGTH Offset() const {
+            return(_offset);
         }
         inline void Offset (const LENGTH offset) {
             _offset = offset;
@@ -105,11 +115,11 @@ struct TypeLengthValueType {
         mutable LENGTH _offset;
         const uint8_t* _value;
     };
-    class Response : public Request<TYPE, LENGTH> {
+    class Response : public Request {
     private:
         Response ();
-        Response(const Response<TYPE, LENGTH, BUFFERSIZE>& copy);
-        Response<TYPE, LENGTH, BUFFERSIZE>& operator=(const Response<TYPE, LENGTH, BUFFERSIZE>& copy);
+        Response(const Response& copy);
+        Response& operator=(const Response& copy);
 
     public:
         inline Response (const TYPE type) : Request(type, _value) {
@@ -118,9 +128,9 @@ struct TypeLengthValueType {
         }
 
     public:
-        bool Copy (const Request<TYPE, LENGTH>& buffer) {
+        bool Copy (const Request& buffer) {
             bool result = false;
-            if (buffer.Type() == Type()) {
+            if (buffer.Type() == Request::Type()) {
                 LENGTH copyLength = std::min(buffer.Length(), BUFFERSIZE);
                 ::memcpy(_value, buffer.Value(), copyLength);
                 Length(copyLength);
@@ -133,13 +143,13 @@ struct TypeLengthValueType {
     private:
         uint8_t _value[BUFFERSIZE];
     };
-    class Buffer : public Request<TYPE, LENGTH> {
+    class Buffer : public Request {
     private:
-        Buffer(const Buffer<TYPE, LENGTH, BUFFERSIZE>& copy);
-        Buffer<TYPE, LENGTH, BUFFERSIZE>& operator=(const Buffer<TYPE, LENGTH, BUFFERSIZE>& copy);
+        Buffer(const Buffer& copy);
+        Buffer& operator=(const Buffer& copy);
 
     public:
-        inline Buffer() : Request<TYPE, LENGTH>(_value) {
+        inline Buffer() : Request(_value) {
         }
         inline ~Buffer() {
         }
@@ -150,51 +160,51 @@ struct TypeLengthValueType {
 
             // Clear the current selected block, move on to the nex block, return true, if 
             // we have a next block..
-            if ((Offset() > 4) && (OffSet() == Length())) {
-                if ( (_used > 0) && (Offset() > 4) ) {
-                    ::memcpy(_value[0], &(_value[Offset() - 4]), _used);
+            if ((Request::Offset() > 4) && (Request::OffSet() == Request::Length())) {
+                if ( (_used > 0) && (Request::Offset() > 4) ) {
+                    ::memcpy(_value[0], &(_value[Request::Offset() - 4]), _used);
                 }
                 uint8_t length = _used;
                 _used = 0;
-                Offset(0);
+                Request::Offset(0);
                 result = Deserialize(_value, length);
             }
             return (result);
         }
         inline bool Deserialize(const uint8_t stream[], const uint16_t length) {
             uint16_t result = 0;
-            if (Offset() < sizeof(TYPE)) {
-                LENGTH offset = Offset();
-                TYPE current = (offset > 0 ? Type() : 0);
+            if (Request::Offset() < sizeof(TYPE)) {
+                LENGTH offset = Request::Offset();
+                TYPE current = (offset > 0 ? Request::Type() : 0);
                 uint8_t loaded = Load(current, &(stream[result]), length - result, offset);
                 result += loaded;
-                Offset(offset + loaded);
-                Type(type);
+                Request::Offset(offset + loaded);
+                Request::Type(current);
             }
-            if ((Offset() < (sizeof(TYPE) + sizeof(LENGTH))) && ((length - result) > 0)) {
-                LENGTH offset = Offset();
-                LENGTH current = (offset > sizeof(TYPE) ? Length() : 0);
+            if ((Request::Offset() < (sizeof(TYPE) + sizeof(LENGTH))) && ((length - result) > 0)) {
+                LENGTH offset = Request::Offset();
+                LENGTH current = (offset > sizeof(TYPE) ? Request::Length() : 0);
                 uint8_t loaded = Load(current, &(stream[result]), length - result, offset - sizeof(TYPE));
                 result += loaded;
-                Offset(offset + loaded);
-                Length(length);
+                Request::Offset(offset + loaded);
+                Request::Length(current);
             }
             if ((length - result) > 0) {
-                uint16_t copyLength = std::min(Length() - Offset() - (sizeof(TYPE) + sizeof(LENGTH)), length - result);
+                uint16_t copyLength = std::min(Request::Length() - Request::Offset() - (sizeof(TYPE) + sizeof(LENGTH)), length - result);
                 if (copyLength > 0) {
-                    ::memcpy (&(_value[Offset()-(sizeof(TYPE) + sizeof(LENGTH))]), &(stream[result]), copyLength);
-                    Offset(Offset() + copyLength);
+                    ::memcpy (&(_value[Request::Offset()-(sizeof(TYPE) + sizeof(LENGTH))]), &(stream[result]), copyLength);
+                    Request::Offset(Request::Offset() + copyLength);
                     result += copyLength;
                 }
             }
 
             if (result < length) {
-                uint16_t copyLength = std::min((2 * BUFFERSIZE) - Offset() - (sizeof(TYPE) + sizeof(LENGTH)) - _used, length - result);
-                ::memcpy((&_value[Offset()-(sizeof(TYPE) + sizeof(LENGTH))) + _used], &stream[result], copyLength);
+                uint16_t copyLength = std::min((2 * BUFFERSIZE) - Request::Offset() - (sizeof(TYPE) + sizeof(LENGTH)) - _used, length - result);
+                ::memcpy(&(_value[Request::Offset()-(sizeof(TYPE) + sizeof(LENGTH)) + _used]), &(stream[result]), copyLength);
                 _used += copyLength;
             }
          
-            return ((Offset() >= (sizeof(TYPE) + sizeof(LENGTH))) && (Offset() == Length()));
+            return ((Request::Offset() >= (sizeof(TYPE) + sizeof(LENGTH))) && (Request::Offset() == Request::Length()));
         }
         
     private:
@@ -219,12 +229,20 @@ struct TypeLengthValueType {
 struct Bluetooth {
 
     enum command : uint8_t {
-        COMMAND_PKT = 0x00,
+        COMMAND_PKT = 0x01,
         EVENT_PKT   = 0x04
     };
 
-    const uint32_t BUFFERSIZE = 255;
+    static constexpr uint32_t BUFFERSIZE = 255;
 
+    static void DumpFrame (const char header[], const uint8_t length, const uint8_t stream[]) {
+        printf("%s ", header);
+        for (uint8_t index = 0; index < length; index++) {
+            if (index != 0) { printf(":"); }
+            printf("%02X", stream[index]);
+        }
+        printf("\n");
+    }
     class Request {
     private:
         Request();
@@ -232,7 +250,15 @@ struct Bluetooth {
         Request& operator=(const Request& copy);
 
     protected:
-        inline Request(const command& cmd, const uint16 sequence, const uint8_t* value)
+        inline Request(const uint8_t* value)
+            : _command(EVENT_PKT)
+            , _sequence(0)
+            , _length(0)
+            , _offset(0)
+            , _value(value) {
+            ASSERT(value != nullptr);
+        }
+        inline Request(const command& cmd, const uint16_t sequence, const uint8_t* value)
             : _command(cmd)
             , _sequence(sequence)
             , _length(0)
@@ -242,7 +268,7 @@ struct Bluetooth {
         }
  
     public:
-        inline Request(const command& cmd, const uint16 sequence, const uint8_t length, const uint8_t* value)
+        inline Request(const command& cmd, const uint16_t sequence, const uint8_t length, const uint8_t* value)
             : _command(cmd)
             , _sequence(sequence)
             , _length(length)
@@ -255,7 +281,7 @@ struct Bluetooth {
 
     public:
         inline void Reset () {
-            Offset(0);
+            Request::Offset(0);
         }
         inline command Command() const {
             return (_command);
@@ -270,10 +296,17 @@ struct Bluetooth {
             return (_value);
         }
         inline uint16_t Acknowledge () const {
-            return (_command != EVENT_PKT ? _sequence : (_length > 2 : ((_value[1] << 8) | _value[2]) : ~0));
+            return (_command != EVENT_PKT ? _sequence : (_length > 2 ? ((_value[1] << 8) | _value[2]) : ~0));
         }
         inline command Response() const {
-            return (_command != EVENT_PKT ? _command : (_length > 0 : _value[0] : ~0));
+            return (_command != EVENT_PKT ? _command : static_cast<command>(_length > 0 ? _value[0] : ~0));
+        }
+        inline uint8_t DataLength() const {
+            return (_length - EventOffset());
+        }
+        inline const uint8_t& operator[] (const uint8_t index) const {
+            ASSERT (index < (_length - EventOffset()));
+            return (_value[index - EventOffset()]);
         }
         inline uint16_t Serialize(uint8_t stream[], const uint16_t length) const {
             uint16_t result = 0;
@@ -282,17 +315,17 @@ struct Bluetooth {
                 _offset++;
                 stream[result++] = _command;
             }
-            if ((offset == 1) && ((length - result) > 0)) {
+            if ((_offset == 1) && ((length - result) > 0)) {
                 _offset++;
                 stream[result++] = static_cast<uint8_t>((_sequence >> 8) & 0xFF);
             }
-            if ((offset == 2) && ((length - result) > 0)) {
+            if ((_offset == 2) && ((length - result) > 0)) {
                 _offset++;
                 if (_command != EVENT_PKT) {
                     stream[result++] = static_cast<uint8_t>(_sequence & 0xFF);
                 }
             }
-            if ((offset == 3) && ((length - result) > 0)) {
+            if ((_offset == 3) && ((length - result) > 0)) {
                 _offset++;
                 stream[result++] = _length;
             }
@@ -304,10 +337,15 @@ struct Bluetooth {
                     result += copyLength;
                 }
             }
+
+            DumpFrame("OUT:", result, stream);
             return (result);
         }
 
     protected:
+        inline uint8_t EventOffset() const {
+            return (_command != EVENT_PKT ? 0 : (_length > 2 ? 3 : _length));
+        }
         inline void Command (const command cmd) {
             _command = cmd;
         }
@@ -317,8 +355,11 @@ struct Bluetooth {
         inline void Length (const uint8_t length) {
             _length = length;
         }
-        inline void Offset (const LENGTH offset) {
+        inline void Offset (const uint8_t offset) {
             _offset = offset;
+        }
+        inline uint8_t Offset () const {
+            return (_offset);
         }
 
     private:
@@ -341,11 +382,11 @@ struct Bluetooth {
         }
 
     public:
-        bool Copy (const Request<TYPE,LENGTH>& buffer) {
+        bool Copy (const Request& buffer) {
             bool result = false;
 
             if ( (buffer.Response() == Command()) && (buffer.Acknowledge() == Sequence())) {
-                uint8_t copyLength = std::min(buffer.Length(), BUFFERSIZE);
+                uint8_t copyLength = static_cast<uint8_t>(buffer.Length() <  BUFFERSIZE ? buffer.Length() : BUFFERSIZE);
                 ::memcpy(_value, buffer.Value(), copyLength);
                 Length(copyLength);
                 result = true;
@@ -357,13 +398,13 @@ struct Bluetooth {
     private:
         uint8_t _value[BUFFERSIZE];
     };
-    class Buffer : public Request<TYPE, LENGTH> {
+    class Buffer : public Request {
     private:
-        Buffer(const Buffer<TYPE, LENGTH, BUFFERSIZE>& copy);
-        Buffer<TYPE, LENGTH, BUFFERSIZE>& operator=(const Buffer<TYPE, LENGTH, BUFFERSIZE>& copy);
+        Buffer(const Buffer& copy);
+        Buffer& operator=(const Buffer& copy);
 
     public:
-        inline Buffer() : Request<TYPE, LENGTH>(_value) {
+        inline Buffer() : Request(_value) {
         }
         inline ~Buffer() {
         }
@@ -374,9 +415,9 @@ struct Bluetooth {
 
             // Clear the current selected block, move on to the nex block, return true, if 
             // we have a next block..
-            if ((Offset() > 4) && (OffSet() == Length())) {
+            if ((Offset() > 4) && (Offset() == Length())) {
                 if ( (_used > 0) && (Offset() > 4) ) {
-                    ::memcpy(_value[0], &(_value[Offset() - 4]), _used);
+                    ::memcpy(_value, &(_value[Offset() - 4]), _used);
                 }
                 uint8_t length = _used;
                 _used = 0;
@@ -396,7 +437,7 @@ struct Bluetooth {
                 Offset(2);
             }
             if ((Offset() < 3) && ((length - result) > 0)) {
-                if (Command != EVENT_PKT) {
+                if (Command() != EVENT_PKT) {
                     uint16_t sequence = (Sequence() << 8) | stream[result++];
                     Sequence(sequence);
                 }
@@ -414,10 +455,10 @@ struct Bluetooth {
                     result += copyLength;
                 }
             }
-
+            DumpFrame("IN: ", result, stream);
             if (result < length) {
-                uint16_t copyLength = std::min((2 * BUFFERSIZE) - Offset() - 4 - _used, length - result);
-                ::memcpy((&_value[Offset()-4) + _used], &stream[result], copyLength);
+                uint16_t copyLength = std::min(static_cast<uint16_t>((2 * BUFFERSIZE) - Offset() - 4 - _used), static_cast<uint16_t>(length - result));
+                ::memcpy(&(_value[Offset() - 4 + _used]), &stream[result], copyLength);
                 _used += copyLength;
             }
          
@@ -430,6 +471,8 @@ struct Bluetooth {
     };
 };
 
+} // namespace Exchange
+
 namespace Core {
     template <typename SOURCE, typename DATAEXCHANGE>
     class MessageExchangeType {
@@ -441,7 +484,7 @@ namespace Core {
             Handler& operator=(const Handler&) = delete;
 
         public:
-            template <typenames... Args>
+            template <typename... Args>
             Handler(MessageExchangeType<SOURCE, DATAEXCHANGE>& parent, Args... args)
                 : SOURCE(args...)
                 , _parent(parent)
@@ -462,6 +505,7 @@ namespace Core {
             }
             virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t receivedSize)
             {
+                printf ("Here is DATA ------------------------------------->\n");
                 return (_parent.ReceiveData(dataFrame, receivedSize));
             }
 
@@ -476,7 +520,7 @@ namespace Core {
 	#ifdef __WIN32__ 
 	#pragma warning( disable : 4355 )
 	#endif
-        template <typenames... Args>
+        template <typename... Args>
         MessageExchangeType(Args... args)
             : _channel(*this, args...)
             , _current(nullptr)
@@ -513,69 +557,50 @@ namespace Core {
         }
         inline uint32_t Flush()
         {
-            _synchronizer.Lock();
+            _responses.Lock();
 
             _channel.Flush();
-            _synchronizer.Flush();
+            _responses.Flush();
             _buffer.Flush();
 
-            _synchronizer.Unlock();
+            _responses.Unlock();
 
             return (OK);
         }
-        uint32_t Exchange (const DATAEXCHANGE::Request& request, const std::function< bool (const DATAEXCHANGE::Request&) >& comparator, const uint32_t allowedTime) {
-            uint32_t result = Core::ERROR_INPROGRESS;
-
-            _synchronizer.Lock();
-
-            if (_current == nullptr) {
-
-                _synchronizer.Load(comparator);
-                _synchronizer.Unlock();
-
-                _channel.Trigger();
-
-                result = _synchronizer.Aquire(allowedTime);
-
-                _current = nullptr;
-            }
-
-            _synchronizer.Unlock();
-
-            return (result);
- 
-            return (_synchronizer.Unlock();
-        }
-        uint32_t Exchange (const DATAEXCHANGE::Request& request, DATAEXCHANGE::Response& response, const uint32_t allowedTime) {
+        uint32_t Exchange (const typename DATAEXCHANGE::Request& request, typename DATAEXCHANGE::Response& response, const uint32_t allowedTime) {
 
             uint32_t result = Core::ERROR_INPROGRESS;
 
-            _synchronizer.Lock();
+            _responses.Lock();
 
             if (_current == nullptr) {
              
-                _synchronizer.Load(response);
+                _responses.Load(response);
                 _current = &request;
-                _synchronizer.Unlock();
+                _responses.Unlock();
 
+                printf("Trigger...\n");
                 _channel.Trigger();
 
-                result = _synchronizer.Aquire(allowedTime);
+                SleepMs(2000);
 
-                _synchronizer.Lock();
+                result = _responses.Aquire(allowedTime);
+                printf("DOne it all...%d\n", allowedTime);
+
+                _responses.Lock();
                 _current = nullptr;
             }
 
-            _synchronizer.Unlock();
+            _responses.Unlock();
 
             return (result);
         }
 
         virtual void StateChange() {
         }
-        virtual void Send(const DATAEXCHANGE::Request& element) {
+        virtual void Send(const typename DATAEXCHANGE::Request& element) {
         }
-        virtual void Received(const DATAEXCHANGE::Buffer& element) {
+        virtual void Received(const typename DATAEXCHANGE::Buffer& element) {
         }
 
     private:
@@ -584,47 +609,46 @@ namespace Core {
         {
             uint16_t result = 0;
 
-            _synchronizer.Lock();
+            _responses.Lock();
 
             if (_current != nullptr) {
                 result = _current->Serialize(dataFrame, maxSendSize);
 
                 if (result == 0) {
-                    Send(*current);
-                    _responses->Evaluate();
+                    Send(*_current);
                 }
             }
 
-            _synchronizer.Unlock();
+            _responses.Unlock();
 
             return (result);
         }
         uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t availableData)
         {
-            _synchronizer.Lock();
+            _responses.Lock();
 
             if (_current != nullptr) {
-                if (_buffer->Deserialize(dataFrame, availableData) == true) {
+                if (_buffer.Deserialize(dataFrame, availableData) == true) {
                     do {
-                        if (_responses->Evaluate(_buffer) == false) {
+                        if (_responses.Evaluate(_buffer) == false) {
                             Received(_buffer);
                         }
                     } while (_buffer.Next() == true);
                 }
             }
 
-            _synchronizer.Unlock();
+            _responses.Unlock();
 
             return (availableData);
         }
 
     private:
         Handler _channel;
-        const DATAEXCHANGE::Request* _current;
-        DATAEXCHANGE::Buffer _buffer;
-        Core::SynchronizeType<DATAEXCHANGE::Response, DATAEXCHANGE::Request> _responses;
+        const typename DATAEXCHANGE::Request* _current;
+        typename DATAEXCHANGE::Buffer _buffer;
+        typename Core::SynchronizeType<typename DATAEXCHANGE::Response> _responses;
     };
 
-    template <typename SOURCE, typename TYPE, typename LENGTH, typename BUFFERSIZE>
-    typedef MessageExchangeType<SOURCE, TypeLengthValueType<TYPE, LENGTH, BUFFERSIZE> > StreamTypeLengthValueType;
+    template <typename SOURCE, typename TYPE, typename LENGTH, const uint32_t BUFFER_SIZE>
+    using StreamTypeLengthValueTypeEx = MessageExchangeType<SOURCE, Exchange::TypeLengthValueType<TYPE, LENGTH, BUFFER_SIZE> >;
 } }

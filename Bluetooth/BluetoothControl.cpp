@@ -1,17 +1,16 @@
-#include "Bluetooth.h"
+#include "BluetoothControl.h"
 
 namespace WPEFramework {
 
 namespace Plugin {
 
-    SERVICE_REGISTRATION(Bluetooth, 1, 0);
+    SERVICE_REGISTRATION(BluetoothControl, 1, 0);
 
     static Core::ProxyPoolType<Web::JSONBodyType<BTStatus> > jsonResponseFactoryBTStatus(1);
     static Core::ProxyPoolType<Web::JSONBodyType<BTDeviceInfo> > jsonResponseFactoryBTDeviceInfo(1);
 
-    /* virtual */ const string Bluetooth::Initialize(PluginHost::IShell* service)
+    /* virtual */ const string BluetoothControl::Initialize(PluginHost::IShell* service)
     {
-        Config config;
         string message;
 
         ASSERT(_service == nullptr);
@@ -19,29 +18,30 @@ namespace Plugin {
         _pid = 0;
         _service = service;
         _skipURL = _service->WebPrefix().length();
-        config.FromString(_service->ConfigLine());
+        _driver = Bluetooth::Driver::Instance(_service->ConfigLine());
 
-        // Register the Process::Notification stuff. The Remote process might die before we get a
-        // change to "register" the sink for these events !!! So do it ahead of instantiation.
-        _service->Register(&_notification);
+        // First see if we can bring up the Driver....
+        if (_driver != nullptr) {
+            // Register the Process::Notification stuff. The Remote process might die before we get a
+            // change to "register" the sink for these events !!! So do it ahead of instantiation.
+            _service->Register(&_notification);
 
-        if (config.OutOfProcess.Value() == true)
-            _bluetooth = _service->Instantiate<Exchange::IBluetooth>(3000, _T("BluetoothImplementation"), static_cast<uint32_t>(~0), _pid, _service->Locator());
-        else
-            _bluetooth = Core::ServiceAdministrator::Instance().Instantiate<Exchange::IBluetooth>(Core::Library(), _T("BluetoothImplementation"), static_cast<uint32_t>(~0));
+            _bluetooth = _service->Instantiate<Exchange::IBluetooth>(3000, _T("BluetoothControlImplementation"), static_cast<uint32_t>(~0), _pid, _service->Locator());
 
-        if (_bluetooth == nullptr) {
-            message = _T("Bluetooth could not be instantiated.");
-            _service->Unregister(&_notification);
-            _service = nullptr;
+            if (_bluetooth == nullptr) {
+                message = _T("BluetoothControl could not be instantiated.");
+                _service->Unregister(&_notification);
+                _service = nullptr;
+            }
+            else {
+                _bluetooth->Configure(_service);
+            }
         }
-        else
-            _bluetooth->Configure(_service);
 
         return message;
     }
 
-    /*virtual*/ void Bluetooth::Deinitialize(PluginHost::IShell* service)
+    /*virtual*/ void BluetoothControl::Deinitialize(PluginHost::IShell* service)
     {
         ASSERT(_service == service);
         ASSERT(_bluetooth != nullptr);
@@ -52,7 +52,7 @@ namespace Plugin {
 
             ASSERT(_pid != 0);
 
-            TRACE_L1("Bluetooth Plugin is not properly destructed. %d", _pid);
+            TRACE_L1("BluetoothControl Plugin is not properly destructed. %d", _pid);
 
             RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
 
@@ -70,13 +70,13 @@ namespace Plugin {
         _service = nullptr;
     }
 
-    /* virtual */ string Bluetooth::Information() const
+    /* virtual */ string BluetoothControl::Information() const
     {
         // No additional info to report.
         return (nullptr);
     }
 
-    /* virtual */ void Bluetooth::Inbound(WPEFramework::Web::Request& request)
+    /* virtual */ void BluetoothControl::Inbound(WPEFramework::Web::Request& request)
     {
         Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, static_cast<uint32_t>(request.Path.length() - _skipURL)), false, '/');
         // By default, we are in front of any element, jump onto the first element, which is if, there is something an empty slot.
@@ -90,11 +90,11 @@ namespace Plugin {
         }
     }
 
-    /* virtual */ Core::ProxyType<Web::Response> Bluetooth::Process(const WPEFramework::Web::Request& request)
+    /* virtual */ Core::ProxyType<Web::Response> BluetoothControl::Process(const WPEFramework::Web::Request& request)
     {
         ASSERT(_skipURL <= request.Path.length());
 
-        TRACE(Trace::Information, (string(_T("Received Bluetooth request"))));
+        TRACE(Trace::Information, (string(_T("Received BluetoothControl request"))));
 
         Core::ProxyType<Web::Response> result;
         Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
@@ -120,7 +120,7 @@ namespace Plugin {
         return result;
     }
 
-    Core::ProxyType<Web::Response> Bluetooth::GetMethod(Core::TextSegmentIterator& index)
+    Core::ProxyType<Web::Response> BluetoothControl::GetMethod(Core::TextSegmentIterator& index)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -180,7 +180,7 @@ namespace Plugin {
         return result;
     }
 
-    Core::ProxyType<Web::Response> Bluetooth::PutMethod(Core::TextSegmentIterator& index, const Web::Request& request)
+    Core::ProxyType<Web::Response> BluetoothControl::PutMethod(Core::TextSegmentIterator& index, const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -240,7 +240,7 @@ namespace Plugin {
         return result;
     }
 
-    Core::ProxyType<Web::Response> Bluetooth::PostMethod(Core::TextSegmentIterator& index, const Web::Request& request)
+    Core::ProxyType<Web::Response> BluetoothControl::PostMethod(Core::TextSegmentIterator& index, const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -249,7 +249,7 @@ namespace Plugin {
         return result;
     }
 
-    Core::ProxyType<Web::Response> Bluetooth::DeleteMethod(Core::TextSegmentIterator& index)
+    Core::ProxyType<Web::Response> BluetoothControl::DeleteMethod(Core::TextSegmentIterator& index)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -258,7 +258,7 @@ namespace Plugin {
         return result;
     }
 
-    void Bluetooth::Deactivated(RPC::IRemoteProcess* process)
+    void BluetoothControl::Deactivated(RPC::IRemoteProcess* process)
     {
         if (process->Id() == _pid) {
 

@@ -1,17 +1,17 @@
-#ifndef __BLUETOOTH_H
-#define __BLUETOOTH_H
+#pragma once
 
 #include "Module.h"
 #include "BluetoothJSONContainer.h"
 #include <interfaces/IBluetooth.h>
+#include "BlueDriver.h"
 
 namespace WPEFramework {
 namespace Plugin {
 
-    class Bluetooth : public PluginHost::IPlugin, public PluginHost::IWeb {
+    class BluetoothControl : public PluginHost::IPlugin, public PluginHost::IWeb {
     private:
-        Bluetooth(const Bluetooth&) = delete;
-        Bluetooth& operator=(const Bluetooth&) = delete;
+        BluetoothControl(const BluetoothControl&) = delete;
+        BluetoothControl& operator=(const BluetoothControl&) = delete;
 
         class Notification : public RPC::IRemoteProcess::INotification {
 
@@ -21,7 +21,7 @@ namespace Plugin {
             Notification& operator=(const Notification&) = delete;
 
         public:
-            explicit Notification(Bluetooth* parent)
+            explicit Notification(BluetoothControl* parent)
                 : _parent(*parent)
             {
                 ASSERT(parent != nullptr);
@@ -44,7 +44,7 @@ namespace Plugin {
             END_INTERFACE_MAP
 
         private:
-            Bluetooth& _parent;
+            BluetoothControl& _parent;
         };
 
         class Config : public Core::JSON::Container {
@@ -68,19 +68,19 @@ namespace Plugin {
         };
 
     public:
-        Bluetooth()
+        BluetoothControl()
             : _service(nullptr)
             , _bluetooth(nullptr)
             , _notification(this)
         {
         }
 
-        virtual ~Bluetooth()
+        virtual ~BluetoothControl()
         {
         }
 
     public:
-        BEGIN_INTERFACE_MAP(Bluetooth)
+        BEGIN_INTERFACE_MAP(BluetoothControl)
             INTERFACE_ENTRY(PluginHost::IPlugin)
             INTERFACE_ENTRY(PluginHost::IWeb)
             INTERFACE_AGGREGATE(Exchange::IBluetooth, _bluetooth)
@@ -126,9 +126,8 @@ namespace Plugin {
         PluginHost::IShell* _service;
         Core::Sink<Notification> _notification;
         Exchange::IBluetooth* _bluetooth;
+        Bluetooth::Driver* _driver;
     };
 } //namespace Plugin
 
 } //namespace Solution
-
-#endif // __BLUETOOTH_H
