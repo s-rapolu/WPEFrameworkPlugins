@@ -53,7 +53,6 @@ namespace WPEFramework
             virtual ~MallocDummyImplementation()
             {
                 _status = false;
-                printf("*** MallocDummyImplementation::Destruct() ***\n");
             }
 
             BEGIN_INTERFACE_MAP(MallocDummyImplementation)
