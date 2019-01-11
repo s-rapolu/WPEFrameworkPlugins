@@ -53,6 +53,7 @@ namespace WPEFramework
             virtual ~MallocDummyImplementation()
             {
                 _status = false;
+                Free();
             }
 
             BEGIN_INTERFACE_MAP(MallocDummyImplementation)
@@ -68,8 +69,8 @@ namespace WPEFramework
 
                 SYSLOG(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
                 uint32_t noOfBlocks = 0;
-                uint32_t blockSize = (8 * PAGE_SZ); //32kB block size
-                uint32_t runs = (uint32_t)size / blockSize; //in Kb
+                uint32_t blockSize = (32 * PAGE_SZ); //128kB block size
+                uint32_t runs = (uint32_t)size / blockSize;
 
                 for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
                 {
@@ -79,6 +80,7 @@ namespace WPEFramework
                         SYSLOG(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
                         break;
                     }
+
                     for (uint32_t index = 0; index < (blockSize << 10); index++)
                     {
                         static_cast<unsigned char*>(_memory.back())[index] = static_cast<unsigned char>(rand() & 0xFF);
@@ -98,12 +100,13 @@ namespace WPEFramework
 
                 _lock.Lock();
 
-                SYSLOG(Trace::Fatal, (_T("*** MallocDummyImplementation::Statm ***")))
+                SYSLOG(Trace::Information, (_T("*** MallocDummyImplementation::Statm ***")))
 
                 TestMemoryUsage();
+
                 allocated = _currentMemoryAllocation;
-                size = (_currentMemoryInfo.size - _startSize) * PAGE_SZ;
-                resident = (_currentMemoryInfo.resident - _startResident) * PAGE_SZ;
+                size = _currentMemoryInfo.size * PAGE_SZ;
+                resident = _currentMemoryInfo.resident * PAGE_SZ;
 
                 _lock.Unlock();
             }
@@ -116,11 +119,14 @@ namespace WPEFramework
 
                 SYSLOG(Trace::Information, (_T("*** MallocDummyImplementation::Free ***")))
 
-                for (auto const& memoryBlock : _memory)
+                if (!_memory.empty())
                 {
-                    free(memoryBlock);
+                    for (auto const& memoryBlock : _memory)
+                    {
+                        free(memoryBlock);
+                    }
+                    _memory.clear();
                 }
-                _memory.clear();
 
                 _currentMemoryAllocation = 0;
                 TestMemoryUsage();
@@ -181,12 +187,11 @@ namespace WPEFramework
         }
         else
         {
-            uint32_t runSize = _currentMemoryInfo.size - _startSize;
-            uint32_t runResident = _currentMemoryInfo.resident - _startResident;
-
             SYSLOG(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
-            SYSLOG(Trace::Information, (_T("*** Run Size:     %lu Kb ***"), runSize * PAGE_SZ))
-            SYSLOG(Trace::Information, (_T("*** Run Resident: %lu Kb ***"), runResident * PAGE_SZ))
+            SYSLOG(Trace::Information, (_T("*** Initial Size:     %lu Kb ***"), _startSize * PAGE_SZ))
+            SYSLOG(Trace::Information, (_T("*** Initial Resident: %lu Kb ***"), _startResident * PAGE_SZ))
+            SYSLOG(Trace::Information, (_T("*** Size:     %lu Kb ***"), _currentMemoryInfo.size * PAGE_SZ))
+            SYSLOG(Trace::Information, (_T("*** Resident: %lu Kb ***"), _currentMemoryInfo.resident * PAGE_SZ))
         }
     }
 
