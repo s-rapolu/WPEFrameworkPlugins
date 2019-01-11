@@ -30,7 +30,7 @@ namespace MallocDummy
                     }
                     else
                     {
-                        _observable = false;
+                        _observable = true;
                         _main = Core::ProcessInfo(pid);
                     }
                 }
@@ -99,7 +99,7 @@ namespace Plugin
         {
             _memory = WPEFramework::MallocDummy::MemoryObserver(_pid);
             ASSERT(_memory != nullptr);
-            _memory->Observe(true);
+            _memory->Observe(_pid);
         }
         else
         {
