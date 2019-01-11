@@ -15,22 +15,99 @@ private:
     static constexpr uint8_t BCM43XX_CLOCK_24 = 2;
     static constexpr uint8_t CMD_SUCCESS = 0;
 
-    // { "bcm43xx",    0x0000, 0x0000, HCI_UART_H4,   115200, 3000000, FLOW_CTL, DISABLE_PM, NULL, bcm43xx, NULL  },
+public:
+    class Config : public Core::JSON::Container {
+    private:
+        Config(const Config&);
+        Config& operator=(const Config&);
+
+    public:
+        Config()
+            : Core::JSON::Container()
+            , Port(_T("/dev/ttyAMA0"))
+            , Firmware(_T("/etc/firmware/"))
+            , BaudRate(921600)
+            , MACAddress()
+            , Break(false) {
+            Add(_T("port"), &Port);
+            Add(_T("firmware"), &Firmware);
+            Add(_T("baudrate"), &BaudRate);
+            Add(_T("address"), &MACAddress);
+            Add(_T("break"), &Break);
+        }
+        ~Config() {
+        }
+
+    public:
+        Core::JSON::String Port;
+        Core::JSON::String Firmware;
+        Core::JSON::DecUInt32 BaudRate;
+        Core::JSON::String MACAddress;
+        Core::JSON::Boolean Break;
+    };
 
 public:
-    Broadcom43XX(const string& portName, const string& directory, const string& MACAddress, const bool sendBreak) 
-        : SerialDriver(portName, Core::SerialPort::BAUDRATE_115200, Core::SerialPort::OFF, sendBreak)
-        , _directory(directory)
+    Broadcom43XX(const Config& config) 
+        : SerialDriver(config.Port.Value(), 115200, Core::SerialPort::OFF, config.Break.Value())
+        , _directory(config.Firmware.Value())
         , _name()
-        , _MACLength(0) {
+        , _MACLength(0)
+        , _baudRate(config.BaudRate.Value()) {
     }
     virtual ~Broadcom43XX() {
     }
 
+public:
+    uint32_t Initialize () {
+        uint32_t result = Reset();
+
+        if (result == Core::ERROR_NONE) {
+            result = LoadName();
+        }
+
+        if (result == Core::ERROR_NONE) {
+            result = SetSpeed(_baudRate);
+        }
+
+        if (result == Core::ERROR_NONE) {
+            uint16_t index = 0;
+            while (isalnum(_name[index++])) /* INTENTIONALLY LEFT EMPTY */;
+            result = Firmware(_directory, _name.substr(0, index - 1));
+        }
+
+        // It has been observed that once the firmware is loaded the name of 
+        // the device changes from BCM43430A1 to BCM43438A1, this is due to
+        // a previous load, that is not nessecarely an issue :-)
+        if (result == Core::ERROR_ALREADY_CONNECTED) {
+            result = Core::ERROR_NONE;
+        }
+        else if (result == Core::ERROR_NONE) {
+            // Controller speed has been reset to default speed!!!
+            SetBaudRate(115200);
+
+            result = Reset();
+
+            if (result == Core::ERROR_NONE) {
+                result = SetSpeed(_baudRate);
+            }
+        }
+
+        if ( (result == Core::ERROR_NONE) && (_MACLength > 0) ) {
+            result = MACAddress(_MACLength, _MACAddress);
+        }
+
+        if (result == Core::ERROR_NONE) {
+            result = SerialDriver::Setup (0, HCI_UART_H4);
+        }
+
+        return (result);
+    }
+
+
 private:
     string FindFirmware(const string& directory, const string& chipName) {
         string result;
-        Core::Directory index(directory.c_str(), "*");
+        Core::Directory index(directory.c_str(), "*.hcd");
 
         while ((result.empty() == true) && (index.Next() == true)) {
 
@@ -49,9 +126,7 @@ private:
         Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x030C);
         uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x030C, 0, nullptr), response, 500);
 
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-	if ((result == Core::ERROR_NONE) && (response[0] != CMD_SUCCESS)) {
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
+	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to reset chip, command failure\n");
 	    result = Core::ERROR_GENERAL;
 	}
@@ -62,12 +137,12 @@ private:
         Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x140C);
         uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x140C, 0, nullptr), response, 500);
 
-	if ((result == Core::ERROR_NONE) && (response[0] != CMD_SUCCESS)) {
+	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to read local name, command failure\n");
             result = Core::ERROR_GENERAL;
         }
         if (result == Core::ERROR_NONE) {
-            _name = string(reinterpret_cast<const TCHAR*>(&(response[1])), response.DataLength()-1); 
+            _name = string(reinterpret_cast<const TCHAR*>(&(response[4]))); 
         }
         return (result);
     }
@@ -75,14 +150,14 @@ private:
         Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x45fc);
         uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x45fc, 1, &clock), response, 500);
 
-	if ((result == Core::ERROR_NONE) && (response[0] != CMD_SUCCESS)) {
+	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to read local name, command failure\n");
             result = Core::ERROR_GENERAL;
         }
 
         return (result);
     }
-    uint32_t SetSpeed(const Core::SerialPort::BaudRate baudrate) {
+    uint32_t SetSpeed(const uint32_t baudrate) {
         uint32_t result = Core::ERROR_NONE;
 
         if (baudrate > 3000000) {
@@ -103,13 +178,16 @@ private:
            Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x18fc);
            uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x18fc, sizeof(data), data), response, 500);
 
-	    if ((result == Core::ERROR_NONE) && (response[0] != CMD_SUCCESS)) {
+	    if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
                 TRACE_L1("Failed to read local name, command failure\n");
                 result = Core::ERROR_GENERAL;
             }
+            else {
+                SetBaudRate(baudrate);
+            }
         }
 
-        return 0;
+        return (result);
     }
     uint32_t MACAddress (const uint8_t length, const uint8_t address[]) {
         uint8_t data[6]; 
@@ -119,7 +197,7 @@ private:
         Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x01fc);
         uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x01fc, sizeof(data), address), response, 500);
 
-	if ((result == Core::ERROR_NONE) && (response[0] != CMD_SUCCESS)) {
+	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to set the MAC address\n");
             result = Core::ERROR_GENERAL;
         }
@@ -129,19 +207,25 @@ private:
     uint32_t Firmware (const string& directory, const string& name) {
         uint32_t result = Core::ERROR_UNAVAILABLE;
         string searchPath = Core::Directory::Normalize(directory);
-        string firmwareName = FindFirmware(searchPath, name);
-       
-        if (firmwareName.empty() == false) { 
+        string firmwareName = FindFirmware(searchPath, name + ".hcd");
+      
+        if (firmwareName.empty() == true) { 
+            // It has been observed that once the firmware is loaded the name of 
+            // the device changes from BCM43430A1 to BCM43438A1, this is due to
+            // a previous load, that is not nessecarely an issue :-)
+            result = Core::ERROR_ALREADY_CONNECTED;
+        }
+        else {
             int fd = open(firmwareName.c_str(), O_RDONLY);
 
             if (fd >= 0) {
                 Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x2efc);
-                uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x2efc, 0, nullptr), response, 500);
+                result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x2efc, 0, nullptr), response, 500);
 
                 Flush();
 
-                if ((result == Core::ERROR_NONE) && (response[6] != CMD_SUCCESS)) {
-                    TRACE_L1("Failed to set chip to download firmware\n");
+                if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
+                    TRACE_L1("Failed to set chip to download firmware, code: %d", response[3]);
 	            result = Core::ERROR_GENERAL;
                 }
      
@@ -150,9 +234,7 @@ private:
                     uint8_t tx_buf[255];
 
                     /* Wait 50ms to let the firmware placed in download mode */
-                    SleepMs(50);
-
-                    Flush();
+                    SleepMs(50); Flush();
 
                     while ((result == Core::ERROR_NONE) && ((loaded = read(fd, tx_buf, 3)) > 0)) {
                         uint16_t code = (tx_buf[0] << 8) | tx_buf[1];
@@ -179,76 +261,25 @@ private:
                 close(fd);
             }
         }
-    }
-    virtual uint32_t Prepare() override {
-        fprintf(stderr, "%s -- %d --\n", __FUNCTION__, __LINE__);
-        uint32_t result = Reset();
-        printf("Going for a sleep @ %s\n", __FUNCTION__);
-        SleepMs(10000);
 
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-        if (result == Core::ERROR_NONE) {
-            result = LoadName();
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-            if (result == Core::ERROR_NONE) {
-                result = Firmware(_directory, _name);
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-                if (result == Core::ERROR_NONE) {
-                    result = SetSpeed(Core::SerialPort::BAUDRATE_3000000);
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-                    if (result == Core::ERROR_NONE) {
-                        result = Reset();
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-                    }
-                }
-            }
-        }
+        return (result);
     }
-
 private:    
     const string _directory;
     string _name;
     uint8_t _MACLength;
     uint8_t _MACAddress[6];
+    uint32_t _baudRate;
 };
 
 /* static */ Driver* Driver::Instance(const string& input) {
-    class Config : public Core::JSON::Container {
-    private:
-        Config(const Config&);
-        Config& operator=(const Config&);
+    Broadcom43XX::Config config; config.FromString(input);
+    Broadcom43XX* driver = new Broadcom43XX(config);
 
-    public:
-        Config()
-            : Core::JSON::Container()
-            , Port(_T("/dev/ttyAMA0"))
-            , Firmware(_T("/etc/firmware/"))
-            , MACAddress()
-            , Break(true) {
-            Add(_T("port"), &Port);
-            Add(_T("firmware"), &Firmware);
-            Add(_T("address"), &MACAddress);
-            Add(_T("break"), &Break);
-        }
-        ~Config() {
-        }
-
-    public:
-        Core::JSON::String Port;
-        Core::JSON::String Firmware;
-        Core::JSON::String MACAddress;
-        Core::JSON::Boolean Break;
-    } config;
-
-    config.FromString(input);
-
-    Broadcom43XX* driver = new Broadcom43XX(config.Port.Value(), config.Firmware.Value(), config.MACAddress.Value(), config.Break.Value());
-
-    uint32_t result = driver->Initialize(Core::SerialPort::BAUDRATE_3000000, 0, HCI_UART_H4);
+    uint32_t result = driver->Initialize();
 
     if (result != Core::ERROR_NONE) {
-        TRACE_L1 ("Failed to start the Bleutooth driver.");
-        fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
+        TRACE_L1 ("Failed to start the Bluetooth driver.");
         delete driver;
         driver = nullptr;
     }

@@ -160,14 +160,14 @@ struct TypeLengthValueType {
 
             // Clear the current selected block, move on to the nex block, return true, if 
             // we have a next block..
-            if ((Request::Offset() > 4) && (Request::OffSet() == Request::Length())) {
-                if ( (_used > 0) && (Request::Offset() > 4) ) {
-                    ::memcpy(_value[0], &(_value[Request::Offset() - 4]), _used);
-                }
-                uint8_t length = _used;
-                _used = 0;
+            if ((Request::Offset() > (sizeof(TYPE) + sizeof(LENGTH))) && ((Request::OffSet() - (sizeof(TYPE) + sizeof(LENGTH))) == Request::Length())) {
                 Request::Offset(0);
-                result = Deserialize(_value, length);
+                if (_used > 0) {
+                    uint8_t length = _used;
+                    _used = 0;
+                    ::memcpy(_value[0], &(_value[Request::Length()]), length);
+                    result = Deserialize(_value, length);
+                }
             }
             return (result);
         }
@@ -355,10 +355,10 @@ struct Bluetooth {
         inline void Length (const uint8_t length) {
             _length = length;
         }
-        inline void Offset (const uint8_t offset) {
+        inline void Offset (const uint16_t offset) {
             _offset = offset;
         }
-        inline uint8_t Offset () const {
+        inline uint16_t Offset () const {
             return (_offset);
         }
 
@@ -366,7 +366,7 @@ struct Bluetooth {
         command _command;
         uint16_t _sequence;
         uint8_t _length;
-        mutable uint8_t _offset;
+        mutable uint16_t _offset;
         const uint8_t* _value;
     };
     class Response : public Request {
@@ -413,16 +413,16 @@ struct Bluetooth {
         inline bool Next() {
             bool result = false;
 
-            // Clear the current selected block, move on to the nex block, return true, if 
+            // Clear the current selected block, move on to the nex block, return true, if
             // we have a next block..
-            if ((Offset() > 4) && (Offset() == Length())) {
-                if ( (_used > 0) && (Offset() > 4) ) {
-                    ::memcpy(_value, &(_value[Offset() - 4]), _used);
+            if ((Request::Offset() > 4) && ((Request::Offset() - 4) == Request::Length())) {
+                Request::Offset(0);
+                if (_used > 0) {
+                    uint8_t length = _used;
+                    _used = 0;
+                    ::memcpy(&_value[0], &(_value[Request::Length()]), length);
+                    result = Deserialize(_value, length);
                 }
-                uint8_t length = _used;
-                _used = 0;
-                Offset(0);
-                result = Deserialize(_value, length);
             }
             return (result);
         }
@@ -448,7 +448,7 @@ struct Bluetooth {
                 Offset(4);
             }
             if ((length - result) > 0) {
-                uint16_t copyLength = std::min(Length() - Offset() - 4, length - result);
+                uint16_t copyLength = std::min(Length() - (Offset() - 4), length - result);
                 if (copyLength > 0) {
                     ::memcpy (&(_value[Offset()-4]), &(stream[result]), copyLength);
                     Offset(Offset() + copyLength);
@@ -457,12 +457,12 @@ struct Bluetooth {
             }
             DumpFrame("IN: ", result, stream);
             if (result < length) {
-                uint16_t copyLength = std::min(static_cast<uint16_t>((2 * BUFFERSIZE) - Offset() - 4 - _used), static_cast<uint16_t>(length - result));
+                uint16_t copyLength = std::min(static_cast<uint16_t>((2 * BUFFERSIZE) - (Offset() - 4) - _used), static_cast<uint16_t>(length - result));
                 ::memcpy(&(_value[Offset() - 4 + _used]), &stream[result], copyLength);
                 _used += copyLength;
             }
-         
-            return ((Offset() >= 4) && (Offset() == Length()));
+        
+            return ((Offset() >= 4) && ((Offset() - 4) == Length()));
         }
         
     private:
@@ -505,7 +505,6 @@ namespace Core {
             }
             virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t receivedSize)
             {
-                printf ("Here is DATA ------------------------------------->\n");
                 return (_parent.ReceiveData(dataFrame, receivedSize));
             }
 
@@ -579,13 +578,9 @@ namespace Core {
                 _current = &request;
                 _responses.Unlock();
 
-                printf("Trigger...\n");
                 _channel.Trigger();
 
-                SleepMs(2000);
-
                 result = _responses.Aquire(allowedTime);
-                printf("DOne it all...%d\n", allowedTime);
 
                 _responses.Lock();
                 _current = nullptr;

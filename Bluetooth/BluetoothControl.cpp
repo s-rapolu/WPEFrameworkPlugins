@@ -24,18 +24,18 @@ namespace Plugin {
         if (_driver != nullptr) {
             // Register the Process::Notification stuff. The Remote process might die before we get a
             // change to "register" the sink for these events !!! So do it ahead of instantiation.
-            _service->Register(&_notification);
+            // _service->Register(&_notification);
 
-            _bluetooth = _service->Instantiate<Exchange::IBluetooth>(3000, _T("BluetoothControlImplementation"), static_cast<uint32_t>(~0), _pid, _service->Locator());
+            // _bluetooth = _service->Instantiate<Exchange::IBluetooth>(3000, _T("BluetoothControlImplementation"), static_cast<uint32_t>(~0), _pid, _service->Locator());
 
-            if (_bluetooth == nullptr) {
-                message = _T("BluetoothControl could not be instantiated.");
-                _service->Unregister(&_notification);
-                _service = nullptr;
-            }
-            else {
-                _bluetooth->Configure(_service);
-            }
+            // if (_bluetooth == nullptr) {
+            //     message = _T("BluetoothControl could not be instantiated.");
+            //     _service->Unregister(&_notification);
+            //     _service = nullptr;
+            // }
+            // else {
+            //    _bluetooth->Configure(_service);
+            //}
         }
 
         return message;
@@ -45,29 +45,36 @@ namespace Plugin {
     {
         ASSERT(_service == service);
         ASSERT(_bluetooth != nullptr);
+        ASSERT(_driver != nullptr);
 
-        _service->Unregister(&_notification);
+        //_service->Unregister(&_notification);
 
-        if (_bluetooth->Release() != Core::ERROR_DESTRUCTION_SUCCEEDED) {
+        //if (_bluetooth->Release() != Core::ERROR_DESTRUCTION_SUCCEEDED) {
 
-            ASSERT(_pid != 0);
+        //    ASSERT(_pid != 0);
 
-            TRACE_L1("BluetoothControl Plugin is not properly destructed. %d", _pid);
+        //    TRACE_L1("BluetoothControl Plugin is not properly destructed. %d", _pid);
 
-            RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
+        //    RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
 
             // The process can disappear in the meantime...
-            if (process != nullptr) {
+            //if (process != nullptr) {
+
 
                 // But if it did not dissapear in the meantime, forcefully terminate it. Shoot to kill :-)
-                process->Terminate();
-                process->Release();
-            }
-        }
+                //process->Terminate();
+                //process->Release();
+            //}
+        //}
 
         // Deinitialize what we initialized..
         _bluetooth = nullptr;
         _service = nullptr;
+
+        if (_driver != nullptr) {
+            delete _driver;
+            _driver = nullptr;
+        }
     }
 
     /* virtual */ string BluetoothControl::Information() const

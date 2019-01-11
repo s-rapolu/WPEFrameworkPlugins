@@ -58,33 +58,12 @@ private:
         typedef MessageExchangeType<Core::SerialPort, Exchange::Bluetooth> BaseClass;
 
     public:
-        Channel(SerialDriver& parent, const string& name, const Core::SerialPort::BaudRate baudrate, const Core::SerialPort::FlowControl flowControl)
-            : BaseClass ()
+        Channel(SerialDriver& parent, const string& name)
+            : BaseClass (name)
             , _parent(parent) {
-            printf("Opening port: %s\n", name.c_str());
-            Link().Configuration(name, baudrate, flowControl, 64, 64);
         }
         virtual ~Channel() {
         }
-
-    public:
-        inline void SetBaudrate(const Core::SerialPort::BaudRate baudrate) {
-            Link().SetBaudrate(baudrate);
-        }
-        void Flush() {
-            Link().Flush();
-        }
-        void SendBreak() {
-            Link().SendBreak();
-        }
-        int Control(int request, ...) {
-            va_list args;
-            va_start(args, request);
-            int result = Link().Control(request, args);
-            va_end(args);
-            return (result);
-        }
-
 
     private:
         virtual void Received(const Exchange::Bluetooth::Buffer& element) override{
@@ -96,17 +75,21 @@ private:
     };
 
 protected:
-    SerialDriver(const string& port, const Core::SerialPort::BaudRate baudRate, const Core::SerialPort::FlowControl flowControl, const bool sendBreak)
+    SerialDriver(const string& port, const uint32_t baudRate, const Core::SerialPort::FlowControl flowControl, const bool sendBreak)
         : Driver()
-        , _port(*this, port, baudRate, flowControl) {
+        , _port(*this, port) {
         if (_port.Open(100) == Core::ERROR_NONE) {
+
+            ToTerminal();
+
             if (sendBreak == true) {
-        fprintf(stderr, "%s -- %d -- \n", __FUNCTION__, __LINE__);
-                _port.SendBreak();
-        fprintf(stderr, "%s -- %d -- \n", __FUNCTION__, __LINE__);
+                _port.Link().SendBreak();
                 SleepMs(500);
             }
-            _port.Flush();
+ 
+            _port.Link().Configuration(Convert(baudRate), flowControl, 64, 64);
+
+            _port.Link().Flush();
         }
     }
 
@@ -114,52 +97,86 @@ public:
     using Message = Exchange::Bluetooth;
 
     virtual ~SerialDriver() {
+        if (_port.IsOpen() == true) {
+            ToTerminal();
+        }
         _port.Close(Core::infinite);
     }
 
-
 public:
-    uint32_t Initialize(const Core::SerialPort::BaudRate baudRate, const unsigned long flags, const int protocol) {
-        uint32_t result = Core::ERROR_UNAVAILABLE;
+    uint32_t Setup (const unsigned long flags, const int protocol) {
+        _port.Link().Flush();
 
-        if (_port.IsOpen() == true) {
-       	    
-            result = Prepare();
-            fprintf(stderr, "%s -- %d -- Result: %d\n", __FUNCTION__, __LINE__, result);
-
-            if (result == Core::ERROR_NONE) {
-	        _port.Flush();
-                _port.SetBaudrate(baudRate);
-
-                if (result == Core::ERROR_NONE) {
-	            int i = N_HCI;
-	            if ( (_port.Control(TIOCSETD, &i) == Core::ERROR_NONE) &&
-	                 (_port.Control(HCIUARTSETFLAGS, &flags) == Core::ERROR_NONE) &&
-	                 (_port.Control(HCIUARTSETPROTO, &protocol) == Core::ERROR_NONE) ) {
-
-                        result = Complete();
-                    }
-                }
-            }
+        int ttyValue = N_HCI;
+        if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), TIOCSETD, &ttyValue) < 0) {
+            TRACE_L1("Failed direct IOCTL to TIOCSETD, %d", errno);
+        }
+        else if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), HCIUARTSETFLAGS, flags) < 0) {
+            TRACE_L1("Failed HCIUARTSETFLAGS. [flags:%d]", flags);
+        }
+        else if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), HCIUARTSETPROTO, protocol) < 0) {
+            TRACE_L1("Failed HCIUARTSETPROTO. [protocol:%d]", protocol);
+        }
+        else {
+            return (Core::ERROR_NONE);
         }
 
-        return (result);
-    }
-    uint32_t Deinitialize() {
+        return (Core::ERROR_GENERAL);
     }
     uint32_t Exchange (const Message::Request& request, Message::Response& response, const uint32_t allowedTime) {
         return (_port.Exchange(request,response, allowedTime));
     }
     void Flush() {
-        _port.Flush();
+        _port.Link().Flush();
+    }
+    void SetBaudRate(const uint32_t baudRate) {
+        _port.Link().SetBaudRate(Convert(baudRate));
     }
 
 private:
+    inline void ToTerminal() {
+        int ttyValue = N_TTY;
+        if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), TIOCSETD, &ttyValue) < 0) {
+            TRACE_L1("Failed direct IOCTL to TIOCSETD, %d", errno);
+        }
+    }
+    Core::SerialPort::BaudRate Convert (const uint32_t baudRate) {
+        if (baudRate <= 110)     return (Core::SerialPort::BAUDRATE_110);
+        if (baudRate <= 300)     return (Core::SerialPort::BAUDRATE_300);
+        if (baudRate <= 600)     return (Core::SerialPort::BAUDRATE_600);
+        if (baudRate <= 1200)    return (Core::SerialPort::BAUDRATE_1200);
+        if (baudRate <= 2400)    return (Core::SerialPort::BAUDRATE_2400);
+        if (baudRate <= 4800)    return (Core::SerialPort::BAUDRATE_4800);
+        if (baudRate <= 9600)    return (Core::SerialPort::BAUDRATE_9600);
+        if (baudRate <= 19200)   return (Core::SerialPort::BAUDRATE_19200);
+        if (baudRate <= 38400)   return (Core::SerialPort::BAUDRATE_38400);
+        if (baudRate <= 57600)   return (Core::SerialPort::BAUDRATE_57600);
+        if (baudRate <= 115200)  return (Core::SerialPort::BAUDRATE_115200);
+        if (baudRate <= 230400)  return (Core::SerialPort::BAUDRATE_230400);
+        if (baudRate <= 460800)  return (Core::SerialPort::BAUDRATE_460800);
+        if (baudRate <= 500000)  return (Core::SerialPort::BAUDRATE_500000);
+        if (baudRate <= 576000)  return (Core::SerialPort::BAUDRATE_576000);
+        if (baudRate <= 921600)  return (Core::SerialPort::BAUDRATE_921600);
+        if (baudRate <= 1000000) return (Core::SerialPort::BAUDRATE_1000000);
+        if (baudRate <= 1152000) return (Core::SerialPort::BAUDRATE_1152000);
+        if (baudRate <= 1500000) return (Core::SerialPort::BAUDRATE_1500000);
+        if (baudRate <= 2000000) return (Core::SerialPort::BAUDRATE_2000000);
+        if (baudRate <= 2500000) return (Core::SerialPort::BAUDRATE_2500000);
+        if (baudRate <= 3000000) return (Core::SerialPort::BAUDRATE_3000000);
+        if (baudRate <= 3500000) return (Core::SerialPort::BAUDRATE_3500000);
+#ifdef B3710000
+        if (baudRate <= 3710000) return (Core::SerialPort::BAUDRATE_3710000);
+#endif
+        if (baudRate <= 4000000) return (Core::SerialPort::BAUDRATE_4000000);
+        return (Core::SerialPort::BAUDRATE_9600);
+    }
     void Received(const Exchange::Bluetooth::Buffer& element) {
     }
     virtual uint32_t Prepare() {
+        return (Core::ERROR_NONE);
     }
     virtual uint32_t Complete() {
+        return (Core::ERROR_NONE);
     }
 
 private:
