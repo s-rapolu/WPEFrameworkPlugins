@@ -76,9 +76,7 @@ namespace Plugin
 {
     SERVICE_REGISTRATION(MallocDummy, 1, 0);
 
-    /*QA: What is a purpose of the jsonResponseFactory argument */
-    static Core::ProxyPoolType<Web::JSONBodyType<MallocDummy::Data> > jsonBodyDataFactory(4);
-    static Core::ProxyPoolType<Web::JSONBodyType<MallocDummy::Data> > jsonResponseFactory(4);
+    static Core::ProxyPoolType<Web::JSONBodyType<MallocDummy::Data> > jsonDataFactory(2);
 
     /* virtual */ const string MallocDummy::Initialize(PluginHost::IShell* service)
     {
@@ -95,17 +93,7 @@ namespace Plugin
         _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
         _service->Register(&_notification);
 
-        config.FromString(_service->ConfigLine());
-        if (config.OutOfProcess.Value())
-        {
-            SYSLOG(Trace::Fatal, (_T("*** Out of process implementation ***")))
-            _mallocDummy = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
-        }
-        else
-        {
-            SYSLOG(Trace::Fatal, (_T("*** In process implementation ***")))
-            _mallocDummy = Core::ServiceAdministrator::Instance().Instantiate<Exchange::IMallocDummy>(Core::Library(), _T("MallocDummyImplementation"), static_cast<uint32_t>(~0));
-        }
+        _mallocDummy = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
 
         if ((_mallocDummy != nullptr) && (_service != nullptr))
         {
@@ -132,7 +120,7 @@ namespace Plugin
         ASSERT(_memory != nullptr);
         ASSERT(_pid);
 
-        SYSLOG(Trace::Fatal, (_T("*** OutOfProcess Plugin is not properly destructed. PID: %d ***"), _pid))
+        SYSLOG(Trace::Information, (_T("*** OutOfProcess Plugin is properly destructed. PID: %d ***"), _pid))
 
         ProcessTermination(_pid);
         _mallocDummy = nullptr;
@@ -152,7 +140,7 @@ namespace Plugin
     {
         if (request.Verb == Web::Request::HTTP_POST)
         {
-            request.Body(jsonBodyDataFactory.Element());
+            request.Body(jsonDataFactory.Element());
         }
     }
 
@@ -165,19 +153,18 @@ namespace Plugin
         result->ErrorCode = Web::STATUS_OK;
         result->Message = "OK";
 
-
         Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
         // Common response for GET and POST, all the time return memoryInfo
-        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonResponseFactory.Element());
+        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
 
         // <GET> - returning current memory allocation
         if ((request.Verb == Web::Request::HTTP_GET) && ((index.Next() == true) && (index.Next() == true)))
         {
-            SYSLOG(Trace::Fatal, (_T("*** Plugin: [%s]: Handle GET request ***"), _pluginName.c_str()))
+            SYSLOG(Trace::Information, (_T("*** Plugin: [%s]: Handle GET request ***"), _pluginName.c_str()))
 
-            if (index.Current() == _T("MemoryInfo"))
+            if (index.Current() == _T("Statm"))
             {
-                GetMemoryInfo(response->Memory);
+                GetStatm(response->Memory);
 
                 result->ContentType = Web::MIMETypes::MIME_JSON;
                 result->Body(Core::proxy_cast<Web::IBody>(response));
@@ -188,19 +175,26 @@ namespace Plugin
         // <POST> - set memory allocation value
         else if ((request.Verb == Web::Request::HTTP_POST) && ((index.Next() == true) && (index.Next() == true)))
         {
-            SYSLOG(Trace::Fatal, (_T("*** Plugin: [%s]: Handle POST request ***"), _pluginName.c_str()))
+            SYSLOG(Trace::Information, (_T("*** Plugin: [%s]: Handle POST request ***"), _pluginName.c_str()))
 
-            if ((index.Current() == _T("SetMemoryAllocation")) && (request.HasBody()))
+            if ((index.Current() == _T("Malloc")) && (request.HasBody()))
             {
-                uint64_t memAllocation = request.Body<const Data>()->Memory.CurrentAllocation.Value();
-                SYSLOG(Trace::Fatal, (_T("*** Set memory allocation: [%d] ***"), memAllocation))
+                uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
 
                 ASSERT(_mallocDummy != nullptr)
                 _mallocDummy->Malloc(memAllocation);
 
-                GetMemoryInfo(response->Memory);
+                GetStatm(response->Memory);
                 result->ContentType = Web::MIMETypes::MIME_JSON;
                 result->Body(Core::proxy_cast<Web::IBody>(response));
+                result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
+                status = true;
+            }
+            else if (index.Current() == _T("Free"))
+            {
+                ASSERT(_mallocDummy != nullptr)
+                _mallocDummy->Free();
+
                 result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
                 status = true;
             }
@@ -215,10 +209,16 @@ namespace Plugin
         return result;
     }
 
-    void MallocDummy::GetMemoryInfo(Data::MemoryInfo& memoryInfo)
+    void MallocDummy::GetStatm(Data::Statm& statm)
     {
         ASSERT(_mallocDummy != nullptr)
-        memoryInfo.CurrentAllocation = _mallocDummy->GetAllocatedMemory();
+        uint32_t allocated, size, resident;
+
+        _mallocDummy->Statm(allocated, size, resident);
+
+        statm.Allocated = allocated;
+        statm.Size = size;
+        statm.Resident = resident;
     }
 
     void MallocDummy::ProcessTermination(uint32_t pid)

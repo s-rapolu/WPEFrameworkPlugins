@@ -40,50 +40,56 @@ namespace Plugin
                 private:
                     MallocDummy& _parent;
             };
-            class Config : public Core::JSON::Container
-            {
-                private:
-                    Config(const Config&) = delete;
-                    Config& operator=(const Config&) = delete;
-
-                public:
-                    Config()
-                        : Core::JSON::Container()
-                        , OutOfProcess(false)
-                    {
-                        Add(_T("outofprocess"), &OutOfProcess);
-                    }
-                    ~Config()
-                    {
-                    }
-
-                public:
-                    Core::JSON::Boolean OutOfProcess;
-            };
-
        public:
             class Data : public Core::JSON::Container
             {
                 public:
-                    class MemoryInfo : public Core::JSON::Container
+                    class Statm : public Core::JSON::Container
                     {
                         private:
-                            MemoryInfo(const MemoryInfo&) = delete;
-                            MemoryInfo& operator=(const MemoryInfo&) = delete;
+                            Statm(const Statm&) = delete;
+                            Statm& operator=(const Statm&) = delete;
 
                         public:
-                            MemoryInfo()
+                            Statm()
                                 : Core::JSON::Container()
-                                , CurrentAllocation(0)
+                                , Allocated(0)
+                                , Size(0)
+                                , Resident(0)
                             {
-                                Add(_T("memoryAllocation"), &CurrentAllocation);
+                                Add(_T("allocated"), &Allocated);
+                                Add(_T("size"), &Size);
+                                Add(_T("resident"), &Resident);
                             }
-                            ~MemoryInfo()
+                            ~Statm()
                             {
                             }
 
                         public:
-                            Core::JSON::DecUInt64 CurrentAllocation;
+                            Core::JSON::DecSInt32 Allocated;
+                            Core::JSON::DecSInt32 Size;
+                            Core::JSON::DecSInt32 Resident;
+                    };
+
+                    class MallocData : public Core::JSON::Container
+                    {
+                        private:
+                            MallocData(const MallocData&) = delete;
+                            MallocData& operator=(const MallocData&) = delete;
+
+                        public:
+                            MallocData()
+                                : Core::JSON::Container()
+                                , Size(0)
+                            {
+                                Add(_T("size"), &Size);
+                            }
+                            ~MallocData()
+                            {
+                            }
+
+                        public:
+                            Core::JSON::DecSInt32 Size;
                     };
 
                 private:
@@ -94,8 +100,10 @@ namespace Plugin
                     Data()
                         : Core::JSON::Container()
                         , Memory()
+                        , Malloc()
                     {
-                        Add(_T("memoryInfo"), &Memory);
+                        Add(_T("statm"), &Memory);
+                        Add(_T("malloc"), &Malloc);
                     }
 
                     virtual ~Data()
@@ -103,7 +111,8 @@ namespace Plugin
                     }
 
                 public:
-                    MemoryInfo Memory;
+                    Statm Memory;
+                    MallocData Malloc;
             };
 
             MallocDummy()
@@ -141,7 +150,7 @@ namespace Plugin
 
             void Deactivated(RPC::IRemoteProcess* process);
 
-            void GetMemoryInfo(Data::MemoryInfo& memoryInfo);
+            void GetStatm(Data::Statm& statm);
             void ProcessTermination(uint32_t pid);
 
             PluginHost::IShell* _service;

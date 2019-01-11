@@ -14,18 +14,18 @@ namespace WPEFramework
 
             enum
             {
-                PAGE_SZ = 1 << 12
+                PAGE_SZ = ((1 << 12) >> 10)
             };
 
             struct MemoryStats
             {
-                uint64_t size;
-                uint64_t resident;
-                uint64_t share;
-                uint64_t text;
-                uint64_t lib;
-                uint64_t data;
-                uint64_t dt;
+                uint32_t size;
+                uint32_t resident;
+                uint32_t share;
+                uint32_t text;
+                uint32_t lib;
+                uint32_t data;
+                uint32_t dt;
             };
 
             MallocDummyImplementation(const MallocDummyImplementation&) = delete;
@@ -34,22 +34,20 @@ namespace WPEFramework
         public:
             MallocDummyImplementation()
                 : _currentMemoryAllocation(0)
+                , _lock()
             {
-                PreventOOMKill();
+                DisableOOMKill();
                 if(!ReadMemoryStatus(_currentMemoryInfo))
                 {
-                    printf("*** MallocDummyImplementation:: Not able to read memory status  ***\n");
+                    SYSLOG(Trace::Fatal, (_T("*** MallocDummyImplementation:: Not able to read memory status  ***")))
                     _status = false;
                 }
                 else
                 {
-                    _startSize = static_cast<uint64_t>(_currentMemoryInfo.size);
-                    _startResident = static_cast<uint64_t>(_currentMemoryInfo.resident);
+                    _startSize = _currentMemoryInfo.size;
+                    _startResident = _currentMemoryInfo.resident;
                     _status = true;
                 }
-
-                printf("*** ##  Memory size  %8lu Kb  resident %8lu Kb ***\n", (_currentMemoryInfo.size * PAGE_SZ) >> 10, (_currentMemoryInfo.resident * PAGE_SZ) >> 10);
-                printf("*** Status %d ***\n", _status);
             }
 
             virtual ~MallocDummyImplementation()
@@ -63,58 +61,90 @@ namespace WPEFramework
             END_INTERFACE_MAP
 
             // IMallocDummy methods
-            uint64_t Malloc(uint64_t size)
+            uint32_t Malloc(uint32_t size) //size in Kb
             {
                 ASSERT(_status);
-                SYSLOG(Trace::Fatal, (_T("*** MallocDummyImplementation::Malloc() ***")))
 
+                _lock.Lock();
+
+                SYSLOG(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
                 uint32_t noOfBlocks = 0;
-                uint64_t blockSize = (8 * PAGE_SZ); //32kB block size
-                uint64_t runs = (size * 1024) / (blockSize / 1024);
+                uint32_t blockSize = (8 * PAGE_SZ); //32kB block size
+                uint32_t runs = (uint32_t)size / blockSize; //in Kb
 
                 for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
                 {
-                    void* _memory = malloc(static_cast<size_t>(blockSize));
-                    if (!_memory)
+                    _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
+                    if (!_memory.back())
                     {
                         SYSLOG(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
                         break;
                     }
-                    for (uint32_t index = 0; index < blockSize; index++)
+                    for (uint32_t index = 0; index < (blockSize << 10); index++)
                     {
-                        static_cast<unsigned char*>(_memory)[index] = static_cast<unsigned char>(rand() & 0xFF);
+                        static_cast<unsigned char*>(_memory.back())[index] = static_cast<unsigned char>(rand() & 0xFF);
                     }
                 }
 
-                _currentMemoryAllocation = (noOfBlocks * blockSize) >> 10;
-                LogMemoryUsage();
+                _currentMemoryAllocation += (noOfBlocks * blockSize);
+
+                _lock.Unlock();
 
                 return _currentMemoryAllocation;
             }
 
-            uint64_t GetAllocatedMemory(void)
+            void Statm(uint32_t &allocated, uint32_t &size, uint32_t &resident)
             {
                 ASSERT(_status);
 
-                LogMemoryUsage();
+                _lock.Lock();
 
-                return _currentMemoryAllocation;
+                SYSLOG(Trace::Fatal, (_T("*** MallocDummyImplementation::Statm ***")))
+
+                TestMemoryUsage();
+                allocated = _currentMemoryAllocation;
+                size = (_currentMemoryInfo.size - _startSize) * PAGE_SZ;
+                resident = (_currentMemoryInfo.resident - _startResident) * PAGE_SZ;
+
+                _lock.Unlock();
+            }
+
+            void Free(void)
+            {
+                ASSERT(_status);
+
+                _lock.Lock();
+
+                SYSLOG(Trace::Information, (_T("*** MallocDummyImplementation::Free ***")))
+
+                for (auto const& memoryBlock : _memory)
+                {
+                    free(memoryBlock);
+                }
+                _memory.clear();
+
+                _currentMemoryAllocation = 0;
+                TestMemoryUsage();
+
+                _lock.Unlock();
             }
 
         private:
-            void PreventOOMKill(void);
+            void DisableOOMKill(void);
             bool ReadMemoryStatus(MemoryStats& info);
-            void LogMemoryUsage(void);
+            void TestMemoryUsage(void);
 
             MemoryStats _currentMemoryInfo;
-            uint64_t _startSize;
-            uint64_t _startResident;
+            uint32_t _startSize;
+            uint32_t _startResident;
+            Core::CriticalSection _lock;
             bool _status;
 
-            uint64_t _currentMemoryAllocation; //size in MB
+            std::list<void *> _memory;
+            uint32_t _currentMemoryAllocation; //size in Kb
     };
 
-    void MallocDummyImplementation::PreventOOMKill()
+    void MallocDummyImplementation::DisableOOMKill()
     {
         int no_oom = -17;
 
@@ -144,14 +174,21 @@ namespace WPEFramework
         return status;
     }
 
-    void MallocDummyImplementation::LogMemoryUsage(void)
+    void MallocDummyImplementation::TestMemoryUsage(void)
     {
-        uint64_t runSize = static_cast<uint64_t>(_currentMemoryInfo.size - _startSize);
-        uint64_t runResident = static_cast<uint64_t>(_currentMemoryInfo.resident - _startResident);
+        if(!ReadMemoryStatus(_currentMemoryInfo))
+        {
+            SYSLOG(Trace::Fatal, (_T("*** MallocDummyImplementation:: Not able to read memory status  ***")))
+        }
+        else
+        {
+            uint32_t runSize = _currentMemoryInfo.size - _startSize;
+            uint32_t runResident = _currentMemoryInfo.resident - _startResident;
 
-        SYSLOG(Trace::Fatal, (_T("*** Current allocated: %lu KB ***"), (uint64_t)_currentMemoryAllocation << 10))
-        SYSLOG(Trace::Fatal, (_T("*** Current Size:     %lu KB ***"), (uint64_t)runSize * PAGE_SZ >> 10))
-        SYSLOG(Trace::Fatal, (_T("*** Current Resident: %lu KB ***"), (uint64_t)runResident * PAGE_SZ >> 10))
+            SYSLOG(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
+            SYSLOG(Trace::Information, (_T("*** Run Size:     %lu Kb ***"), runSize * PAGE_SZ))
+            SYSLOG(Trace::Information, (_T("*** Run Resident: %lu Kb ***"), runResident * PAGE_SZ))
+        }
     }
 
 SERVICE_REGISTRATION(MallocDummyImplementation, 1, 0);
