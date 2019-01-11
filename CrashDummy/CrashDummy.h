@@ -2,6 +2,7 @@
 
 #include "Module.h"
 #include <interfaces/ICrashDummy.h>
+#include "JSONObjects.h"
 
 namespace WPEFramework {
 namespace Plugin {
