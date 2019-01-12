@@ -123,8 +123,8 @@ private:
         return (result);
     }
     uint32_t Reset() {
-        Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x030C);
-        uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x030C, 0, nullptr), response, 500);
+        Exchange::Response response (Exchange::COMMAND_PKT, 0x030C);
+        uint32_t result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x030C, 0, nullptr), response, 500);
 
 	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to reset chip, command failure\n");
@@ -134,8 +134,8 @@ private:
 	return result;
     }
     uint32_t LoadName() {
-        Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x140C);
-        uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x140C, 0, nullptr), response, 500);
+        Exchange::Response response (Exchange::COMMAND_PKT, 0x140C);
+        uint32_t result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x140C, 0, nullptr), response, 500);
 
 	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to read local name, command failure\n");
@@ -147,8 +147,8 @@ private:
         return (result);
     }
     uint32_t SetClock(const uint8_t clock) {
-        Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x45fc);
-        uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x45fc, 1, &clock), response, 500);
+        Exchange::Response response (Exchange::COMMAND_PKT, 0x45fc);
+        uint32_t result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x45fc, 1, &clock), response, 500);
 
 	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to read local name, command failure\n");
@@ -175,8 +175,8 @@ private:
             data[4] = static_cast<uint8_t>((baudrate >> 16) & 0xFF);
             data[5] = static_cast<uint8_t>((baudrate >> 24) & 0xFF);
 
-           Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x18fc);
-           uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x18fc, sizeof(data), data), response, 500);
+           Exchange::Response response (Exchange::COMMAND_PKT, 0x18fc);
+           uint32_t result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x18fc, sizeof(data), data), response, 500);
 
 	    if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
                 TRACE_L1("Failed to read local name, command failure\n");
@@ -194,8 +194,8 @@ private:
         ::memcpy (data, address, std::min(length, static_cast<uint8_t>(sizeof(data))));
         ::memset (&(data[length]), 0, sizeof(data) - std::min(length, static_cast<uint8_t>(sizeof(data))));
 
-        Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x01fc);
-        uint32_t result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x01fc, sizeof(data), address), response, 500);
+        Exchange::Response response (Exchange::COMMAND_PKT, 0x01fc);
+        uint32_t result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x01fc, sizeof(data), address), response, 500);
 
 	if ((result == Core::ERROR_NONE) && (response[3] != CMD_SUCCESS)) {
             TRACE_L1("Failed to set the MAC address\n");
@@ -219,8 +219,8 @@ private:
             int fd = open(firmwareName.c_str(), O_RDONLY);
 
             if (fd >= 0) {
-                Message::Response response (Exchange::Bluetooth::COMMAND_PKT, 0x2efc);
-                result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, 0x2efc, 0, nullptr), response, 500);
+                Exchange::Response response (Exchange::COMMAND_PKT, 0x2efc);
+                result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, 0x2efc, 0, nullptr), response, 500);
 
                 Flush();
 
@@ -244,8 +244,8 @@ private:
                             result = Core::ERROR_READ_ERROR;
                         }
                         else {
-                            Message::Response response (Exchange::Bluetooth::COMMAND_PKT, code);
-                            result = Exchange (Message::Request(Exchange::Bluetooth::COMMAND_PKT, code, len, tx_buf), response, 500);
+                            Exchange::Response response (Exchange::COMMAND_PKT, code);
+                            result = Exchange (Exchange::Request(Exchange::COMMAND_PKT, code, len, tx_buf), response, 500);
                             Flush();
                         }
                     }

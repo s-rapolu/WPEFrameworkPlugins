@@ -65,6 +65,35 @@
 
 namespace WPEFramework {
 
+namespace Core {
+
+    class SocketBluetooth : public Core::SocketPort {
+    private:
+        SocketBluetooth() = delete;
+        SocketBluetooth(const SocketBluetooth&) = delete;
+        SocketBluetooth& operator=(const SocketBluetooth&) = delete;
+
+    public:
+        SocketBluetooth( const Core::NodeId& localNode, const uint16_t bufferSize) :
+            SocketPort((localNode.Extension() == BTPROTO_HCI ? SocketPort::RAW : SocketPort::SEQUENCED),localNode, Core::NodeId(), bufferSize, bufferSize) {
+        }
+        virtual ~SocketBluetooth() {
+        }
+
+    public:
+        // Methods to extract and insert data into the socket buffers
+        virtual uint16_t SendData(uint8_t* dataFrame, const uint16_t maxSendSize) = 0;
+        virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t receivedSize) = 0;
+
+        // Signal a state change, Opened, Closed or Accepted
+        virtual void StateChange() = 0;
+    };
+
+} } // namespace WPEFramework::Core
+
+
+namespace WPEFramework {
+
 namespace Plugin {
 
     class BluetoothImplementation : public Exchange::IBluetooth, public Core::Thread
@@ -126,6 +155,25 @@ namespace Plugin {
                 return -1;
             }
 
+/* Open HCI device. Returns device descriptor (dd). 
+int hci_open_dev(int dev_id)
+{
+        struct sockaddr_hci a;
+        int dd, err;
+
+        dd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
+        if (dd < 0) return dd;
+
+        memset(&a, 0, sizeof(a));
+        a.hci_family = AF_BLUETOOTH;
+        a.hci_dev = dev_id;
+        if (bind(dd, (struct sockaddr *) &a, sizeof(a)) < 0)
+                goto failed;
+
+        return dd;
+}
+*/
+
             _hciSocket = hci_open_dev(_hciHandle);
             if (_hciSocket < 0) {
                 TRACE(Trace::Error, ("Failed to Open HCI Socket"));
@@ -180,13 +228,6 @@ namespace Plugin {
         Core::JSON::ArrayType<BTDeviceInfo> _jsonConnectedDevices;
         Core::CriticalSection _scanningThreadLock;
         };
-
-} /* namespace WPEFramework::Plugin */
-}
-
-namespace WPEFramework {
-
-namespace Plugin {
 
     bool BluetoothImplementation::ConfigureBTAdapter()
     {
