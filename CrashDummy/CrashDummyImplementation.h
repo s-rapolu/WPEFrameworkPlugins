@@ -22,9 +22,15 @@ private:
     CrashDummyImplementation(const CrashDummyImplementation&) = delete;
     CrashDummyImplementation& operator=(const CrashDummyImplementation&) = delete;
 
+private:
+    static constexpr char pendingCrashFilePath[] = _T("/tmp/CrashDummy.pending");
+
 public:
     bool Configure(PluginHost::IShell* shell) override;
     void Crash() override;
+    bool CrashNTimes(uint8_t n) override;
+    void ExecPendingCrash() override;
+    uint8_t PendingCrashCount() override;
 
     BEGIN_INTERFACE_MAP(CrashDummyImplementation)
     INTERFACE_ENTRY(Exchange::ICrashDummy)
@@ -48,6 +54,9 @@ private:
     public:
         Core::JSON::DecUInt8 CrashDelay;
     };
+
+private:
+    bool SetPendingCrashCount(uint8_t newCrashCount);
 
 private:
     std::list<PluginHost::IStateControl::INotification*> _observers;

@@ -31,6 +31,7 @@ private:
     CrashDummy& operator=(const CrashDummy&) = delete;
 
 public:
+    void Activated();
     void Deactivated(RPC::IRemoteProcess* process);
 
     // Build QueryInterface implementation, specifying all possible interfaces to be returned.
@@ -39,6 +40,26 @@ public:
     INTERFACE_ENTRY(PluginHost::IWeb)
     INTERFACE_AGGREGATE(Exchange::ICrashDummy, _implementation)
     END_INTERFACE_MAP
+
+public:
+    class CrashParameters : public Core::JSON::Container {
+    private:
+        CrashParameters(const CrashParameters&) = delete;
+        CrashParameters& operator=(const CrashParameters&) = delete;
+
+    public:
+        CrashParameters()
+            : Core::JSON::Container()
+            , CrashCount()
+        {
+            Add(_T("crashCount"), &CrashCount);
+        }
+
+        ~CrashParameters() {}
+
+    public:
+        Core::JSON::DecUInt8 CrashCount;
+    };
 
 private:
     class Notification : public RPC::IRemoteProcess::INotification {
@@ -57,7 +78,7 @@ private:
         ~Notification() {}
 
     public:
-        virtual void Activated(RPC::IRemoteProcess*) override {}
+        virtual void Activated(RPC::IRemoteProcess*) override { _parent.Activated(); }
         virtual void Deactivated(RPC::IRemoteProcess* process) override { _parent.Deactivated(process); }
 
         BEGIN_INTERFACE_MAP(Notification)

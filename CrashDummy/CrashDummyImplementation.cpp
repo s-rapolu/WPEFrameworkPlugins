@@ -1,5 +1,7 @@
 #include "CrashDummyImplementation.h"
 
+#include <fstream>
+
 namespace WPEFramework {
 namespace Plugin {
 
@@ -31,5 +33,82 @@ void CrashDummyImplementation::Crash()
     return;
 }
 
+bool CrashDummyImplementation::CrashNTimes(uint8_t n)
+{
+    bool status = true;
+    uint8_t pendingCrashCount = PendingCrashCount();
+
+    if (pendingCrashCount != 0) {
+        status = false;
+        TRACE(Trace::Information, (_T("Pending crash already in progress")));
+    } else {
+        if (!SetPendingCrashCount(n)) {
+            TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
+            status = false;
+        } else {
+            ExecPendingCrash();
+        }
+    }
+
+    return status;
+}
+
+void CrashDummyImplementation::ExecPendingCrash()
+{
+    uint8_t pendingCrashCount = PendingCrashCount();
+    if (pendingCrashCount > 0) {
+        pendingCrashCount--;
+        if (SetPendingCrashCount(pendingCrashCount)) {
+            Crash();
+        } else {
+            TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
+        }
+    } else {
+        TRACE(Trace::Information, (_T("No pending crash")));
+    }
+}
+
+uint8_t CrashDummyImplementation::PendingCrashCount()
+{
+    uint8_t pendingCrashCount = 0;
+
+    std::ifstream pendingCrashFile;
+    pendingCrashFile.open(pendingCrashFilePath, std::fstream::binary);
+
+    if (pendingCrashFile.is_open()) {
+        uint8_t readVal = 0;
+
+        pendingCrashFile >> readVal;
+        if (pendingCrashFile.good()) {
+            pendingCrashCount = readVal;
+        } else {
+            TRACE(Trace::Information, (_T("Failed to read value from pendingCrashFile")));
+        }
+    }
+
+    return pendingCrashCount;
+}
+
+bool CrashDummyImplementation::SetPendingCrashCount(uint8_t newCrashCount)
+{
+    bool status = false;
+
+    std::ofstream pendingCrashFile;
+    pendingCrashFile.open(pendingCrashFilePath, std::fstream::binary | std::fstream::trunc);
+
+    if (pendingCrashFile.is_open()) {
+
+        pendingCrashFile << newCrashCount;
+
+        if (pendingCrashFile.good()) {
+            status = true;
+        } else {
+            TRACE(Trace::Information, (_T("Failed to write value to pendingCrashFile ")));
+        }
+        pendingCrashFile.close();
+    }
+
+    return status;
+}
 } // namespace Plugin
 } // namespace WPEFramework

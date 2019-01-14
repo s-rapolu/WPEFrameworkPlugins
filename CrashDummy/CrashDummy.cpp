@@ -5,6 +5,8 @@ namespace Plugin {
 
 SERVICE_REGISTRATION(CrashDummy, 1, 0);
 
+static Core::ProxyPoolType<Web::JSONBodyType<CrashDummy::CrashParameters>> crashParametersResFactory(1);
+
 //
 // IPlugin overrides
 //
@@ -30,6 +32,7 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
         _shell = nullptr;
     } else {
         _implementation->Configure(_shell);
+        _implementation->ExecPendingCrash();
         TRACE(Trace::Information, ("CrashDummy Plugin initialized %p", _implementation));
     }
 
@@ -76,8 +79,19 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
 //
 // IWeb overrides
 //
-/* virtual */ void CrashDummy::Inbound(Web::Request& /*request*/)
+/* virtual */ void CrashDummy::Inbound(Web::Request& request)
 {
+    Core::TextSegmentIterator index(
+        Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
+
+    if ((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
+        if (index.Next() && index.Next()) {
+            if (index.Current().Text() == _T("CrashNTimes")) {
+                request.Body(crashParametersResFactory.Element());
+            }
+        }
+    }
+
     return;
 }
 
@@ -85,14 +99,13 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
 {
     TRACE(Trace::Information, ("Processing request...", __FUNCTION__));
 
-    // Proxy object for response type.
     Core::ProxyType<Web::Response> response(PluginHost::Factories::Instance().Response());
-    Core::TextSegmentIterator index(
-        Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
-
     // Default
     response->Message = _T("Method not allowed");
     response->ErrorCode = Web::STATUS_METHOD_NOT_ALLOWED;
+
+    Core::TextSegmentIterator index(
+        Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
 
     if ((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
         // PUT/POST - /CrashDummy/Crash
@@ -112,6 +125,11 @@ SERVICE_REGISTRATION(CrashDummy, 1, 0);
 //
 // CrashDummy
 //
+void CrashDummy::Activated()
+{
+    return;
+}
+
 void CrashDummy::Deactivated(RPC::IRemoteProcess* process)
 {
     if (process->Id() == _pid) {
