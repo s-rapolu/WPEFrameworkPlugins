@@ -1,5 +1,7 @@
 #include "MallocDummy.h"
 
+using namespace std::placeholders;
+
 namespace WPEFramework
 {
 namespace MallocDummy
@@ -100,6 +102,16 @@ namespace Plugin
             _memory = WPEFramework::MallocDummy::MemoryObserver(_pid);
             ASSERT(_memory != nullptr);
             _memory->Observe(_pid);
+
+            ///////////////////// Start - Test Methods Definition ///////////////////////
+            auto statm = std::bind(&MallocDummy::Statm, this, _1);
+            auto malloc = std::bind(&MallocDummy::Malloc, this, _1);
+            auto free = std::bind(&MallocDummy::Free, this, _1);
+
+            _client.Reqister("Statm", Web::Request::type::HTTP_GET, statm);
+            _client.Reqister("Malloc", Web::Request::type::HTTP_POST, malloc);
+            _client.Reqister("Free", Web::Request::type::HTTP_POST, free);
+            ///////////////////// End - Test Methods Definition ///////////////////////
         }
         else
         {
@@ -148,77 +160,7 @@ namespace Plugin
     {
         ASSERT(_skipURL <= request.Path.length());
 
-        bool status = false;
-        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
-        result->ErrorCode = Web::STATUS_OK;
-        result->Message = "OK";
-
-        Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
-        // Common response for GET and POST, all the time return memoryInfo
-        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
-
-        // <GET> - returning current memory allocation
-        if ((request.Verb == Web::Request::HTTP_GET) && ((index.Next() == true) && (index.Next() == true)))
-        {
-            SYSLOG(Trace::Information, (_T("*** Plugin: [%s]: Handle GET request ***"), _pluginName.c_str()))
-
-            if (index.Current() == _T("Statm"))
-            {
-                GetStatm(response->Memory);
-
-                result->ContentType = Web::MIMETypes::MIME_JSON;
-                result->Body(Core::proxy_cast<Web::IBody>(response));
-                result->Message = (_T("Handle GET request for the [%s] service"), _pluginName.c_str());
-                status = true;
-            }
-        }
-        // <POST> - set memory allocation value
-        else if ((request.Verb == Web::Request::HTTP_POST) && ((index.Next() == true) && (index.Next() == true)))
-        {
-            SYSLOG(Trace::Information, (_T("*** Plugin: [%s]: Handle POST request ***"), _pluginName.c_str()))
-
-            if ((index.Current() == _T("Malloc")) && (request.HasBody()))
-            {
-                uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
-
-                ASSERT(_mallocDummy != nullptr)
-                _mallocDummy->Malloc(memAllocation);
-
-                GetStatm(response->Memory);
-                result->ContentType = Web::MIMETypes::MIME_JSON;
-                result->Body(Core::proxy_cast<Web::IBody>(response));
-                result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
-                status = true;
-            }
-            else if (index.Current() == _T("Free"))
-            {
-                ASSERT(_mallocDummy != nullptr)
-                _mallocDummy->Free();
-
-                result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
-                status = true;
-            }
-        }
-
-        if (status == false)
-        {
-            result->ErrorCode = Web::STATUS_BAD_REQUEST;
-            result->Message = (_T("Unsupported request for the [%s] service."), _pluginName.c_str());
-        }
-
-        return result;
-    }
-
-    void MallocDummy::GetStatm(Data::Statm& statm)
-    {
-        ASSERT(_mallocDummy != nullptr)
-        uint32_t allocated, size, resident;
-
-        _mallocDummy->Statm(allocated, size, resident);
-
-        statm.Allocated = allocated;
-        statm.Size = size;
-        statm.Resident = resident;
+        return _client.Process(request, _skipURL);
     }
 
     void MallocDummy::ProcessTermination(uint32_t pid)
@@ -240,5 +182,64 @@ namespace Plugin
         }
     }
 
+    // Tests API
+    Core::ProxyType<Web::Response> MallocDummy::Statm(const Web::Request& request)
+    {
+        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
+        result->ErrorCode = Web::STATUS_OK;
+        result->Message = (_T("Handle Malloc request for the [%s] service"), _pluginName.c_str());
+
+        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
+        GetStatm(response->Memory);
+
+        result->ContentType = Web::MIMETypes::MIME_JSON;
+        result->Body(Core::proxy_cast<Web::IBody>(response));
+
+        return result;
+    }
+
+    Core::ProxyType<Web::Response> MallocDummy::Malloc(const Web::Request& request)
+    {
+        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
+        result->ErrorCode = Web::STATUS_OK;
+        result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
+
+        uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
+
+        ASSERT(_mallocDummy != nullptr)
+        _mallocDummy->Malloc(memAllocation);
+
+        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
+        GetStatm(response->Memory);
+
+        result->ContentType = Web::MIMETypes::MIME_JSON;
+        result->Body(Core::proxy_cast<Web::IBody>(response));
+
+        return result;
+    }
+
+    Core::ProxyType<Web::Response> MallocDummy::Free(const Web::Request& request)
+    {
+        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
+        result->ErrorCode = Web::STATUS_OK;
+        result->Message = (_T("Handle Free request for the [%s] service"), _pluginName.c_str());
+
+        ASSERT(_mallocDummy != nullptr)
+        _mallocDummy->Free();
+
+        return result;
+    }
+
+    void MallocDummy::GetStatm(Data::Statm& statm)
+    {
+        ASSERT(_mallocDummy != nullptr)
+        uint32_t allocated, size, resident;
+
+        _mallocDummy->Statm(allocated, size, resident);
+
+        statm.Allocated = allocated;
+        statm.Size = size;
+        statm.Resident = resident;
+    }
 } // namespace Plugin
 } // namespace WPEFramework
