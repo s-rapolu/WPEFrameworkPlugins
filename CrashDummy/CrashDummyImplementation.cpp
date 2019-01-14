@@ -5,6 +5,8 @@
 namespace WPEFramework {
 namespace Plugin {
 
+#define PENDING_CRASH_FILEPATH "/tmp/CrashDummy.pending"
+
 SERVICE_REGISTRATION(CrashDummyImplementation, 1, 0);
 
 bool CrashDummyImplementation::Configure(PluginHost::IShell* shell)
@@ -73,7 +75,7 @@ uint8_t CrashDummyImplementation::PendingCrashCount()
     uint8_t pendingCrashCount = 0;
 
     std::ifstream pendingCrashFile;
-    pendingCrashFile.open(pendingCrashFilePath, std::fstream::binary);
+    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
 
     if (pendingCrashFile.is_open()) {
         uint8_t readVal = 0;
@@ -94,7 +96,7 @@ bool CrashDummyImplementation::SetPendingCrashCount(uint8_t newCrashCount)
     bool status = false;
 
     std::ofstream pendingCrashFile;
-    pendingCrashFile.open(pendingCrashFilePath, std::fstream::binary | std::fstream::trunc);
+    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary | std::fstream::trunc);
 
     if (pendingCrashFile.is_open()) {
 

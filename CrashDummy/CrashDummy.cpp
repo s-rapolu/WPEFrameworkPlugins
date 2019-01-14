@@ -101,112 +101,23 @@ static Core::ProxyPoolType<Web::JSONBodyType<JSONObject::Parameters>> parameters
 {
     TRACE(Trace::Information, ("Processing request...", __FUNCTION__));
 
-    // Proxy object for response type.
     Core::ProxyType<Web::Response> response(PluginHost::Factories::Instance().Response());
-    // Default
     response->Message = _T("Method not allowed");
     response->ErrorCode = Web::STATUS_METHOD_NOT_ALLOWED;
 
-    Core::TextSegmentIterator index(
-        Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
+    bool continueProcess = ProcessCommonRequest(request, response);
+    if (continueProcess) {
+        Core::TextSegmentIterator index(
+            Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
 
-    if ((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
-        // PUT/POST - /CrashDummy/Crash
-        if (index.Next() && index.Next()) {
-            if (index.Current().Text() == _T("Crash")) {
-                response->Message = _T("Got Crash request");
-                response->ErrorCode = Web::STATUS_OK;
-                ASSERT(_implementation != nullptr)
-                _implementation->Crash();
-            }
-        }
-    }
-
-    // HARDCODED DATA
-    std::list<string> methodNames;
-    methodNames.push_back(_T("Crash"));
-    methodNames.push_back(_T("CrashNTimes"));
-
-    if (request.Verb == Web::Request::HTTP_GET) {
-        if (index.Next() && index.Next()) {
-            // GET - /CrashDummy/Methods
-            if (index.Current().Text() == _T("Methods")) {
-                if (!index.Next()) {
-                    // GET - /CrashDummy/Methods
-                    Core::ProxyType<Web::JSONBodyType<JSONObject::Methods>> body(methodsResFactory.Element());
-                    // MOVE TO SOME METHOD WHEN READY
-                    std::list<string>::const_iterator index(methodNames.begin());
-                    while (index != methodNames.end()) {
-                        Core::JSON::String newElement;
-                        newElement = *index;
-                        body->MethodNames.Add(newElement);
-                        index++;
-                    }
-
-                    response->ContentType = Web::MIMETypes::MIME_JSON;
-                    response->Body(Core::proxy_cast<Web::IBody>(body));
-                    response->Message = _T("Got Methods request!");
+        if ((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
+            // PUT/POST - /CrashDummy/Crash
+            if (index.Next() && index.Next()) {
+                if (index.Current().Text() == _T("Crash")) {
+                    response->Message = _T("Got Crash request");
                     response->ErrorCode = Web::STATUS_OK;
-                } else {
-                    string methodName = index.Current().Text();
-                    auto it = std::find(methodNames.begin(), methodNames.end(), methodName);
-
-                    if (it != methodNames.end()) {
-                        if (index.Next()) {
-                            if (index.Current().Text() == _T("Description")) {
-                                // GET - /CrashDummy/Methods/<METHOD_NAME>/Description
-                                Core::ProxyType<Web::JSONBodyType<JSONObject::MethodDescription>> body(
-                                    methodDescriptionResFactory.Element());
-
-                                // MOVE TO SOME METHOD WHEN READY
-                                Core::JSON::String description;
-                                description = _T("Some description");
-                                body->Description = description;
-
-                                response->ContentType = Web::MIMETypes::MIME_JSON;
-                                response->Body(Core::proxy_cast<Web::IBody>(body));
-                                response->Message = _T("Got Description request!");
-                                response->ErrorCode = Web::STATUS_OK;
-                            } else if (index.Current().Text() == _T("Parameters")) {
-                                // GET - /CrashDummy/Methods/<METHOD_NAME>/Parameters
-                                Core::ProxyType<Web::JSONBodyType<JSONObject::Parameters>> body(
-                                    parametersResFactory.Element());
-
-                                // input
-                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> input;
-                                JSONObject::Parameters::Parameter newElement;
-                                newElement.Type = _T("IN/type1");
-                                newElement.Name = _T("IN/name1");
-                                newElement.Comment = _T("IN/comment1");
-                                body->Input.Add(newElement);
-
-                                newElement.Type = _T("IN/type2");
-                                newElement.Name = _T("IN/name2");
-                                newElement.Comment = _T("IN/comment2");
-                                body->Input.Add(newElement);
-
-                                // output
-                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> output;
-                                newElement.Type = _T("OUT/type1");
-                                newElement.Name = _T("OUT/name1");
-                                newElement.Comment = _T("OUT/comment1");
-                                body->Output.Add(newElement);
-
-                                newElement.Type = _T("OUT/type2");
-                                newElement.Name = _T("OUT/name2");
-                                newElement.Comment = _T("OUT/comment2");
-                                body->Output.Add(newElement);
-
-                                response->ContentType = Web::MIMETypes::MIME_JSON;
-                                response->Body(Core::proxy_cast<Web::IBody>(body));
-                                response->Message = _T("Got Prameters request!");
-                                response->ErrorCode = Web::STATUS_OK;
-                            } else {
-                                response->Message = _T("Got Prameters request!");
-                                response->ErrorCode = Web::STATUS_FORBIDDEN;
-                            }
-                        }
-                    }
+                    ASSERT(_implementation != nullptr)
+                    _implementation->Crash();
                 }
             }
         }
@@ -233,6 +144,141 @@ void CrashDummy::Deactivated(RPC::IRemoteProcess* process)
     }
 
     return;
+}
+
+
+bool CrashDummy::ProcessCommonRequest(const Web::Request& request, Core::ProxyType<Web::Response>& response)
+{
+    bool isRequestFinished = false;
+
+    Core::TextSegmentIterator index(
+        Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
+
+    if (request.Verb == Web::Request::HTTP_GET) {
+        if (index.Next() && index.Next()) {
+            // GET - /CrashDummy/Methods
+            if (index.Current().Text() == _T("Methods")) {
+                if (!index.Next()) {
+                    // GET - /CrashDummy/Methods
+                    Core::ProxyType<Web::JSONBodyType<JSONObject::Methods>> body(methodsResFactory.Element());
+
+                    Core::JSON::String newElement;
+                    newElement = _T("Crash");
+                    body->MethodNames.Add(newElement);
+                    newElement = _T("CrashNTimes");
+                    body->MethodNames.Add(newElement);
+
+                    response->ContentType = Web::MIMETypes::MIME_JSON;
+                    response->Body(Core::proxy_cast<Web::IBody>(body));
+                    response->Message = _T("Got Methods request!");
+                    response->ErrorCode = Web::STATUS_OK;
+                    isRequestFinished = true;
+                } else {
+                    string methodName = index.Current().Text();
+                    if (methodName == _T("Crash")) {
+                        if (index.Next()) {
+                            if (index.Current().Text() == _T("Description")) {
+                                // GET - /CrashDummy/Methods/Crash/Description
+                                Core::ProxyType<Web::JSONBodyType<JSONObject::MethodDescription>> body(
+                                    methodDescriptionResFactory.Element());
+
+                                // MOVE TO SOME METHOD WHEN READY
+                                Core::JSON::String description;
+                                description = _T("Will cause Crash (segmentation fault) when called");
+                                body->Description = description;
+
+                                response->ContentType = Web::MIMETypes::MIME_JSON;
+                                response->Body(Core::proxy_cast<Web::IBody>(body));
+                                response->Message = _T("Got Description request!");
+                                response->ErrorCode = Web::STATUS_OK;
+                                isRequestFinished = true;
+                            } else if (index.Current().Text() == _T("Parameters")) {
+                                // GET - /CrashDummy/Methods/<METHOD_NAME>/Parameters
+                                Core::ProxyType<Web::JSONBodyType<JSONObject::Parameters>> body(
+                                    parametersResFactory.Element());
+
+                                // input
+                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> input;
+                                JSONObject::Parameters::Parameter newElement;
+                                newElement.Type = _T("void");
+                                newElement.Name = _T("");
+                                newElement.Comment = _T("no input argument required");
+                                body->Input.Add(newElement);
+
+                                // output
+                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> output;
+                                newElement.Type = _T("void");
+                                newElement.Name = _T("");
+                                newElement.Comment = _T("no outputargument returned");
+                                body->Output.Add(newElement);
+
+                                response->ContentType = Web::MIMETypes::MIME_JSON;
+                                response->Body(Core::proxy_cast<Web::IBody>(body));
+                                response->Message = _T("Got Prameters request!");
+                                response->ErrorCode = Web::STATUS_OK;
+                                isRequestFinished = true;
+                            } else {
+                                response->Message = _T("Method not supported");
+                                response->ErrorCode = Web::STATUS_OK;
+                            }
+                        }
+                    } else if (methodName == _T("CrashNTimes")) {
+                        if (index.Next()) {
+                            if (index.Current().Text() == _T("Description")) {
+                                // GET - /CrashDummy/Methods/Crash/Description
+                                Core::ProxyType<Web::JSONBodyType<JSONObject::MethodDescription>> body(
+                                    methodDescriptionResFactory.Element());
+
+                                // MOVE TO SOME METHOD WHEN READY
+                                Core::JSON::String description;
+                                description = _T("Will cause Crash N times (segmentation fault) when called");
+                                body->Description = description;
+
+                                response->ContentType = Web::MIMETypes::MIME_JSON;
+                                response->Body(Core::proxy_cast<Web::IBody>(body));
+                                response->Message = _T("Got Description request!");
+                                response->ErrorCode = Web::STATUS_OK;
+                                isRequestFinished = true;
+                            } else if (index.Current().Text() == _T("Parameters")) {
+                                // GET - /CrashDummy/Methods/<METHOD_NAME>/Parameters
+                                Core::ProxyType<Web::JSONBodyType<JSONObject::Parameters>> body(
+                                    parametersResFactory.Element());
+
+                                // input
+                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> input;
+                                JSONObject::Parameters::Parameter newElement;
+                                newElement.Type = _T("uint8_t");
+                                newElement.Name = _T("crashCount");
+                                newElement.Comment = _T("Desired consequtive crash count");
+                                body->Input.Add(newElement);
+
+                                // output
+                                Core::JSON::ArrayType<JSONObject::Parameters::Parameter> output;
+                                newElement.Type = _T("void");
+                                newElement.Name = _T("");
+                                newElement.Comment = _T("no outputargument returned");
+                                body->Output.Add(newElement);
+
+                                response->ContentType = Web::MIMETypes::MIME_JSON;
+                                response->Body(Core::proxy_cast<Web::IBody>(body));
+                                response->Message = _T("Got Prameters request!");
+                                response->ErrorCode = Web::STATUS_OK;
+                                isRequestFinished = true;
+                            } else {
+                                response->Message = _T("Method not supported");
+                                response->ErrorCode = Web::STATUS_OK;
+                            }
+                        }
+                    } else {
+                        response->Message = _T("Method not supported");
+                        response->ErrorCode = Web::STATUS_OK;
+                    }
+                }
+            }
+        }
+    }
+
+    return isRequestFinished;
 }
 
 } // namespace Plugin

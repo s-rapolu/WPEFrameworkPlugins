@@ -1,8 +1,8 @@
 #pragma once
 
+#include "JSONObjects.h"
 #include "Module.h"
 #include <interfaces/ICrashDummy.h>
-#include "JSONObjects.h"
 
 namespace WPEFramework {
 namespace Plugin {
@@ -89,6 +89,9 @@ private:
     private:
         CrashDummy& _parent;
     };
+
+private:
+    bool ProcessCommonRequest(const Web::Request& request, Core::ProxyType<Web::Response>& response);
 
 private:
     PluginHost::IShell* _shell;

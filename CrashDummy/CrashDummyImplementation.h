@@ -22,9 +22,6 @@ private:
     CrashDummyImplementation(const CrashDummyImplementation&) = delete;
     CrashDummyImplementation& operator=(const CrashDummyImplementation&) = delete;
 
-private:
-    static constexpr char pendingCrashFilePath[] = _T("/tmp/CrashDummy.pending");
-
 public:
     bool Configure(PluginHost::IShell* shell) override;
     void Crash() override;
