@@ -103,15 +103,32 @@ namespace Plugin
             ASSERT(_memory != nullptr);
             _memory->Observe(_pid);
 
-            ///////////////////// Start - Test Methods Definition ///////////////////////
+            ///////////////////// Start - Test Methods Definition: MallocDummy ///////////////////////
             auto statm = std::bind(&MallocDummy::Statm, this, _1);
             auto malloc = std::bind(&MallocDummy::Malloc, this, _1);
             auto free = std::bind(&MallocDummy::Free, this, _1);
 
-            _client.Reqister("Statm", Web::Request::type::HTTP_GET, statm);
-            _client.Reqister("Malloc", Web::Request::type::HTTP_POST, malloc);
-            _client.Reqister("Free", Web::Request::type::HTTP_POST, free);
-            ///////////////////// End - Test Methods Definition ///////////////////////
+            //ToDo: Try to simplify this initialization of functions parameters
+            std::vector<std::string> statmIn_0({ "void", "", "no input argument required" });
+            std::map<int, std::vector<string>> statmIn = {{0, statmIn_0}};
+
+            std::vector<std::string> mallocIn_0({ "uint32_t", "size", "allocate block of memory [Kb]" });
+            std::map<int, std::vector<string>> mallocIn = {{0, mallocIn_0}};
+
+            std::vector<std::string> freeIn_0({ "void", "", "no input argument required" });
+            std::map<int, std::vector<string>> freeIn = {{0, freeIn_0}};
+            std::vector<std::string> freeOut_0({ "void", "", "no output argument returned" });
+            std::map<int, std::vector<string>> freeOut = {{0, freeOut_0}};
+
+            std::vector<std::string> memOut_0({ "uint32_t", "allocated", "current allocated memory [Kb]" });
+            std::vector<std::string> memOut_1({ "uint32_t", "size", "size value from /proc/self/statm [Kb]" });
+            std::vector<std::string> memOut_2({ "uint32_t", "resident", "resident value from /proc/self/statm [Kb]" });
+            std::map<int, std::vector<string>> memOut = {{0, memOut_0}, {1, memOut_1}, {2, memOut_2}};
+
+            _client.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
+            _client.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
+            _client.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
+            ///////////////////// End - Test Methods Definition: MallocDummy ///////////////////////
         }
         else
         {
@@ -133,6 +150,8 @@ namespace Plugin
         ASSERT(_pid);
 
         SYSLOG(Trace::Information, (_T("*** OutOfProcess Plugin is properly destructed. PID: %d ***"), _pid))
+
+        //ToDo: Unregister tests are missing
 
         ProcessTermination(_pid);
         _mallocDummy = nullptr;
