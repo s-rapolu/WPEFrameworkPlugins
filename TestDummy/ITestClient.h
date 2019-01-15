@@ -9,8 +9,6 @@ namespace WPEFramework {
 namespace Exchange {
 
 struct ITestClient {
-    // ToDo: ID needs to be adjusted
-    enum { ID = 0x12000011 };
 
     virtual ~ITestClient() {}
     virtual bool Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
