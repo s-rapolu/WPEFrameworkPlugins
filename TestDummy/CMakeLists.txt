@@ -9,7 +9,7 @@ set(PLUGIN_OPTIONS)
 
 set(PLUGIN_SOURCES
         Module.cpp
-        TestClient.cpp
+        TestController.cpp
         TestDummy.cpp
         TestDummyImplementation.cpp)
 

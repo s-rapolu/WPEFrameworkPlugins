@@ -2,7 +2,7 @@
 
 #include "Module.h"
 
-#include "ITestClient.h"
+#include "ITestController.h"
 #include "TestData.h"
 
 #include <vector>
@@ -11,7 +11,7 @@ namespace WPEFramework {
 namespace Plugin {
 namespace TestCore {
 
-class TestClient : public Exchange::ITestClient {
+class TestController : public Exchange::ITestController {
 private:
     class TestMethod {
     private:
@@ -40,17 +40,17 @@ private:
     };
 
 private:
-    TestClient(const TestClient&) = delete;
-    TestClient& operator=(const TestClient&) = delete;
+    TestController(const TestController&) = delete;
+    TestController& operator=(const TestController&) = delete;
 
 public:
-    TestClient()
+    TestController()
     {
         _tests.insert(std::pair<Web::Request::type, std::list<TestMethod>>(Web::Request::type::HTTP_POST, {}));
         _tests.insert(std::pair<Web::Request::type, std::list<TestMethod>>(Web::Request::type::HTTP_GET, {}));
     }
 
-    virtual ~TestClient()
+    virtual ~TestController()
     {
         for (auto& test : _tests) {
             test.second.clear();
@@ -58,7 +58,7 @@ public:
         _tests.clear();
     }
 
-    // ITestClient methods
+    // ITestController methods
     bool Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
         const std::map<int, std::vector<string>>& output, Web::Request::type requestType,
         const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest) override;

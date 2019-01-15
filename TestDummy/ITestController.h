@@ -8,9 +8,9 @@ namespace WPEFramework {
 // ToDo: Potentially move this Interface to WPEFramework
 namespace Exchange {
 
-struct ITestClient {
+struct ITestController {
 
-    virtual ~ITestClient() {}
+    virtual ~ITestController() {}
     virtual bool Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
         const std::map<int, std::vector<string>>& output, Web::Request::type requestType,
         const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest)

@@ -125,9 +125,9 @@ namespace Plugin
             std::vector<std::string> memOut_2({ "uint32_t", "resident", "resident value from /proc/self/statm [Kb]" });
             std::map<int, std::vector<string>> memOut = {{0, memOut_0}, {1, memOut_1}, {2, memOut_2}};
 
-            _client.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
-            _client.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
-            _client.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
+            _controller.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
+            _controller.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
+            _controller.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
             ///////////////////// End - Test Methods Definition: Memory ///////////////////////
 
             ///////////////////// Start - Test Methods Definition: Crash ///////////////////////
@@ -145,8 +145,8 @@ namespace Plugin
             std::vector<std::string> crashNTimesOut_0({ "void", "", "no output argument returned" });
             std::map<int, std::vector<string>> crashNTimesOut = {{0, crashNTimesOut_0}};
 
-            _client.Reqister("Crash", "Causes plugin to crash", crashIn, crashOut, Web::Request::type::HTTP_POST, crash);
-            _client.Reqister("CrashNTimes", "Causes plugin to crash N times in  row", crashNTimesIn, crashNTimesOut, Web::Request::type::HTTP_POST, crashNTimes);
+            _controller.Reqister("Crash", "Causes plugin to crash", crashIn, crashOut, Web::Request::type::HTTP_POST, crash);
+            _controller.Reqister("CrashNTimes", "Causes plugin to crash N times in  row", crashNTimesIn, crashNTimesOut, Web::Request::type::HTTP_POST, crashNTimes);
             ///////////////////// End - Test Methods Definition: Crash ///////////////////////
 
             _implementation->Configure(_service);
@@ -201,7 +201,7 @@ namespace Plugin
     {
         ASSERT(_skipURL <= request.Path.length());
 
-        return _client.Process(request, _skipURL);
+        return _controller.Process(request, _skipURL);
     }
 
     void TestDummy::ProcessTermination(uint32_t pid)

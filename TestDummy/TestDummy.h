@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Module.h"
-#include "TestClient.h"
+#include "TestController.h"
 
 #include <interfaces/ITestDummy.h>
 #include <interfaces/IMemory.h>
@@ -156,7 +156,7 @@ namespace Plugin
                 , _pluginName("TestDummy")
                 , _skipURL(0)
                 , _pid(0)
-                , _client(){}
+                , _controller(){}
 
             virtual ~TestDummy() {}
 
@@ -201,7 +201,7 @@ namespace Plugin
             string _pluginName;
             uint8_t _skipURL;
             uint32_t _pid;
-            TestCore::TestClient _client;
+            TestCore::TestController _controller;
     };
 
 } // namespace Plugin

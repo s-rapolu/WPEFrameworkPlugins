@@ -1,4 +1,4 @@
-#include "TestClient.h"
+#include "TestController.h"
 
 #include "TestData.h"
 
@@ -12,8 +12,8 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestData::Methods>> methodsFactory(
 static Core::ProxyPoolType<Web::JSONBodyType<TestData::MethodDescription>> methodDescriptionFactory(2);
 static Core::ProxyPoolType<Web::JSONBodyType<TestData::Parameters>> parametersFactory(2);
 
-// ITestClient methods
-bool TestClient::Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
+// ITestController methods
+bool TestController::Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
     const std::map<int, std::vector<string>>& output, Web::Request::type requestType,
     const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest)
 {
@@ -34,13 +34,13 @@ bool TestClient::Reqister(const string& name, const string& desciption, const st
     return status;
 }
 
-bool TestClient::Unregister(const string& name)
+bool TestController::Unregister(const string& name)
 {
     // ToDo: Missing implementation
     return false;
 }
 
-Core::ProxyType<Web::Response> TestClient::Process(const Web::Request& request, uint8_t skipURL)
+Core::ProxyType<Web::Response> TestController::Process(const Web::Request& request, uint8_t skipURL)
 {
     bool exit = false;
     Core::TextSegmentIterator index(
@@ -85,7 +85,7 @@ Core::ProxyType<Web::Response> TestClient::Process(const Web::Request& request, 
     return result;
 }
 
-Core::ProxyType<Web::Response> TestClient::GetMethods(void)
+Core::ProxyType<Web::Response> TestController::GetMethods(void)
 {
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
     result->ErrorCode = Web::STATUS_OK;
@@ -106,7 +106,7 @@ Core::ProxyType<Web::Response> TestClient::GetMethods(void)
     return result;
 }
 
-Core::ProxyType<Web::Response> TestClient::GetMethodDescription(string methodName)
+Core::ProxyType<Web::Response> TestController::GetMethodDescription(string methodName)
 {
     bool exit = false;
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
@@ -137,7 +137,7 @@ Core::ProxyType<Web::Response> TestClient::GetMethodDescription(string methodNam
     return result;
 }
 
-Core::ProxyType<Web::Response> TestClient::GetMethodParameters(string methodName)
+Core::ProxyType<Web::Response> TestController::GetMethodParameters(string methodName)
 {
     bool exit = false;
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
