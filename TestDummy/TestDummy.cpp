@@ -95,7 +95,7 @@ namespace Plugin
         _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
         _service->Register(&_notification);
 
-        _implementation = _service->Root<Exchange::ITestDummy>(_pid, 2000, _T("TestDummyImplementation"));
+        _implementation = _service->Root<Exchange::ITestDummy>(_pid, ImplWaitTime, _T("TestDummyImplementation"));
 
         if ((_implementation != nullptr) && (_service != nullptr))
         {
@@ -103,7 +103,7 @@ namespace Plugin
             ASSERT(_memory != nullptr);
             _memory->Observe(_pid);
 
-            ///////////////////// Start - Test Methods Definition: TestDummy ///////////////////////
+            ///////////////////// Start - Test Methods Definition: Memory ///////////////////////
             auto statm = std::bind(&TestDummy::Statm, this, _1);
             auto malloc = std::bind(&TestDummy::Malloc, this, _1);
             auto free = std::bind(&TestDummy::Free, this, _1);
@@ -128,7 +128,29 @@ namespace Plugin
             _client.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
             _client.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
             _client.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
-            ///////////////////// End - Test Methods Definition: TestDummy ///////////////////////
+            ///////////////////// End - Test Methods Definition: Memory ///////////////////////
+
+            ///////////////////// Start - Test Methods Definition: Crash ///////////////////////
+            auto crash = std::bind(&TestDummy::Crash, this, _1);
+            auto crashNTimes = std::bind(&TestDummy::CrashNTimes, this, _1);
+
+            //ToDo: Try to simplify this initialization of functions parameters
+            std::vector<std::string> crashIn_0({ "void", "", "no input argument required" });
+            std::map<int, std::vector<string>> crashIn = {{0, crashIn_0}};
+            std::vector<std::string> crashOut_0({ "void", "", "no output argument returned" });
+            std::map<int, std::vector<string>> crashOut = {{0, crashOut_0}};
+
+            std::vector<std::string> crashNTimesIn_0({ "uint8_t", "crashCount", "desired consequtive crash count" });
+            std::map<int, std::vector<string>> crashNTimesIn = {{0, crashNTimesIn_0}};
+            std::vector<std::string> crashNTimesOut_0({ "void", "", "no output argument returned" });
+            std::map<int, std::vector<string>> crashNTimesOut = {{0, crashNTimesOut_0}};
+
+            _client.Reqister("Crash", "Causes plugin to crash", crashIn, crashOut, Web::Request::type::HTTP_POST, crash);
+            _client.Reqister("CrashNTimes", "Causes plugin to crash N times in  row", crashNTimesIn, crashNTimesOut, Web::Request::type::HTTP_POST, crashNTimes);
+            ///////////////////// End - Test Methods Definition: Crash ///////////////////////
+
+            _implementation->Configure(_service);
+            _implementation->ExecPendingCrash();
         }
         else
         {
@@ -192,6 +214,11 @@ namespace Plugin
         }
     }
 
+    void TestDummy::Activated(RPC::IRemoteProcess* /*process*/)
+    {
+        return;
+    }
+
     void TestDummy::Deactivated(RPC::IRemoteProcess* process)
     {
         if (_pid == process->Id())
@@ -206,7 +233,7 @@ namespace Plugin
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
-        result->Message = (_T("Handle Malloc request for the [%s] service"), _pluginName.c_str());
+        result->Message = (_T("Handle Statm request for the [%s] service"), _pluginName.c_str());
 
         Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
         GetStatm(response->Memory);
@@ -221,7 +248,7 @@ namespace Plugin
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
-        result->Message = (_T("Handle POST request for the [%s] service"), _pluginName.c_str());
+        result->Message = (_T("Handle Malloc request for the [%s] service"), _pluginName.c_str());
 
         uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
 
@@ -245,6 +272,38 @@ namespace Plugin
 
         ASSERT(_implementation != nullptr)
         _implementation->Free();
+
+        return result;
+    }
+
+    Core::ProxyType<Web::Response> TestDummy::Crash(const Web::Request& request)
+    {
+        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
+        result->ErrorCode = Web::STATUS_OK;
+        result->Message = (_T("Handle Crash request for the [%s] service"), _pluginName.c_str());
+
+        ASSERT(_implementation != nullptr)
+        _implementation->Crash();
+
+        return result;
+    }
+
+    Core::ProxyType<Web::Response> TestDummy::CrashNTimes(const Web::Request& request)
+    {
+        Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
+        result->ErrorCode = Web::STATUS_OK;
+        result->Message = (_T("Handle CrashNTimes request for the [%s] service"), _pluginName.c_str());
+
+        if(request.HasBody()){
+            uint8_t crashCount = request.Body<const Data>()->Crash.CrashCount.Value();
+            ASSERT(_implementation != nullptr)
+            _implementation->CrashNTimes(crashCount);
+        }
+        else
+        {
+            result->ErrorCode = Web::STATUS_BAD_REQUEST;
+            result->Message = (_T("Missing body for CrashNTimes request"));
+        }
 
         return result;
     }

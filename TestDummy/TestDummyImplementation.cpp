@@ -147,6 +147,8 @@ void TestDummyImplementation::ExecPendingCrash()
     } else {
         TRACE(Trace::Information, (_T("No pending crash")));
     }
+
+    return;
 }
 
 uint8_t TestDummyImplementation::PendingCrashCount()

@@ -10,8 +10,13 @@ namespace WPEFramework
 {
 namespace Plugin
 {
+
     class TestDummy : public PluginHost::IPlugin, public PluginHost::IWeb
     {
+        public:
+            // maximum wait time for process to be spawned
+            static constexpr uint32_t ImplWaitTime = 1000;
+
         private:
             class Notification : public RPC::IRemoteProcess::INotification
             {
@@ -28,7 +33,11 @@ namespace Plugin
                     virtual ~Notification() {}
 
                 public:
-                    virtual void Activated(RPC::IRemoteProcess* /* process */) {}
+                    virtual void Activated(RPC::IRemoteProcess* process)
+                    {
+                        _parent.Activated(process);
+                    }
+
                     virtual void Deactivated(RPC::IRemoteProcess* process)
                     {
                         _parent.Deactivated(process);
@@ -41,7 +50,7 @@ namespace Plugin
                 private:
                     TestDummy& _parent;
             };
-       public:
+        public:
             class Data : public Core::JSON::Container
             {
                 public:
@@ -93,6 +102,25 @@ namespace Plugin
                             Core::JSON::DecSInt32 Size;
                     };
 
+                    class CrashData : public Core::JSON::Container {
+                    private:
+                        CrashData(const CrashData&) = delete;
+                        CrashData& operator=(const CrashData&) = delete;
+
+                    public:
+                        CrashData()
+                            : Core::JSON::Container()
+                            , CrashCount()
+                        {
+                            Add(_T("crashCount"), &CrashCount);
+                        }
+
+                        ~CrashData() {}
+
+                    public:
+                        Core::JSON::DecUInt8 CrashCount;
+                    };
+
                 private:
                     Data(const Data&) = delete;
                     Data& operator=(const Data&) = delete;
@@ -102,9 +130,11 @@ namespace Plugin
                         : Core::JSON::Container()
                         , Memory()
                         , Malloc()
+                        , Crash()
                     {
                         Add(_T("statm"), &Memory);
                         Add(_T("malloc"), &Malloc);
+                        Add(_T("crash"), &Crash);
                     }
 
                     virtual ~Data()
@@ -114,8 +144,10 @@ namespace Plugin
                 public:
                     Statm Memory;
                     MallocData Malloc;
+                    CrashData Crash;
             };
 
+        public:
             TestDummy()
                 : _service(nullptr)
                 , _notification(this)
@@ -150,6 +182,7 @@ namespace Plugin
             TestDummy(const TestDummy&) = delete;
             TestDummy& operator=(const TestDummy&) = delete;
 
+            void Activated(RPC::IRemoteProcess* process);
             void Deactivated(RPC::IRemoteProcess* process);
             void ProcessTermination(uint32_t pid);
             void GetStatm(Data::Statm& statm);
@@ -158,6 +191,8 @@ namespace Plugin
             Core::ProxyType<Web::Response> Statm(const Web::Request& request);
             Core::ProxyType<Web::Response> Malloc(const Web::Request& request);
             Core::ProxyType<Web::Response> Free(const Web::Request& request);
+            Core::ProxyType<Web::Response> Crash(const Web::Request& request);
+            Core::ProxyType<Web::Response> CrashNTimes(const Web::Request& request);
 
             PluginHost::IShell* _service;
             Core::Sink<Notification> _notification;
