@@ -88,16 +88,16 @@ namespace Plugin
 
         ASSERT(service != nullptr);
         ASSERT(_service == nullptr);
-        ASSERT(_mallocDummy == nullptr);
+        ASSERT(_implementation == nullptr);
         ASSERT(_memory == nullptr);
 
         _service = service;
         _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
         _service->Register(&_notification);
 
-        _mallocDummy = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
+        _implementation = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
 
-        if ((_mallocDummy != nullptr) && (_service != nullptr))
+        if ((_implementation != nullptr) && (_service != nullptr))
         {
             _memory = WPEFramework::TestDummy::MemoryObserver(_pid);
             ASSERT(_memory != nullptr);
@@ -145,7 +145,7 @@ namespace Plugin
     /* virtual */ void TestDummy::Deinitialize(PluginHost::IShell* service)
     {
         ASSERT(_service == service);
-        ASSERT(_mallocDummy != nullptr);
+        ASSERT(_implementation != nullptr);
         ASSERT(_memory != nullptr);
         ASSERT(_pid);
 
@@ -154,7 +154,7 @@ namespace Plugin
         //ToDo: Unregister tests are missing
 
         ProcessTermination(_pid);
-        _mallocDummy = nullptr;
+        _implementation = nullptr;
         _memory->Release();
         _memory = nullptr;
         _service->Unregister(&_notification);
@@ -225,8 +225,8 @@ namespace Plugin
 
         uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
 
-        ASSERT(_mallocDummy != nullptr)
-        _mallocDummy->Malloc(memAllocation);
+        ASSERT(_implementation != nullptr)
+        _implementation->Malloc(memAllocation);
 
         Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
         GetStatm(response->Memory);
@@ -243,18 +243,18 @@ namespace Plugin
         result->ErrorCode = Web::STATUS_OK;
         result->Message = (_T("Handle Free request for the [%s] service"), _pluginName.c_str());
 
-        ASSERT(_mallocDummy != nullptr)
-        _mallocDummy->Free();
+        ASSERT(_implementation != nullptr)
+        _implementation->Free();
 
         return result;
     }
 
     void TestDummy::GetStatm(Data::Statm& statm)
     {
-        ASSERT(_mallocDummy != nullptr)
+        ASSERT(_implementation != nullptr)
         uint32_t allocated, size, resident;
 
-        _mallocDummy->Statm(allocated, size, resident);
+        _implementation->Statm(allocated, size, resident);
 
         statm.Allocated = allocated;
         statm.Size = size;

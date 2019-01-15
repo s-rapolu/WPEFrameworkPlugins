@@ -120,7 +120,7 @@ namespace Plugin
                 : _service(nullptr)
                 , _notification(this)
                 , _memory(nullptr)
-                , _mallocDummy(nullptr)
+                , _implementation(nullptr)
                 , _pluginName("TestDummy")
                 , _skipURL(0)
                 , _pid(0)
@@ -132,7 +132,7 @@ namespace Plugin
                 INTERFACE_ENTRY(PluginHost::IPlugin)
                 INTERFACE_ENTRY(PluginHost::IWeb)
                 INTERFACE_AGGREGATE(Exchange::IMemory, _memory)
-                INTERFACE_AGGREGATE(Exchange::IMallocDummy, _mallocDummy)
+                INTERFACE_AGGREGATE(Exchange::IMallocDummy, _implementation)
             END_INTERFACE_MAP
 
             //   IPlugin methods
@@ -162,7 +162,7 @@ namespace Plugin
             PluginHost::IShell* _service;
             Core::Sink<Notification> _notification;
             Exchange::IMemory* _memory;
-            Exchange::IMallocDummy* _mallocDummy;
+            Exchange::IMallocDummy* _implementation;
             string _pluginName;
             uint8_t _skipURL;
             uint32_t _pid;
