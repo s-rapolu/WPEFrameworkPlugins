@@ -2,16 +2,16 @@
 
 #include "Module.h"
 
-#include <interfaces/ITestDummy.h>
+#include <interfaces/ITestService.h>
 
 namespace WPEFramework {
-class TestDummyImplementation : public Exchange::ITestDummy {
+class TestServiceImplementation : public Exchange::ITestService {
 private:
-    TestDummyImplementation(const TestDummyImplementation&) = delete;
-    TestDummyImplementation& operator=(const TestDummyImplementation&) = delete;
+    TestServiceImplementation(const TestServiceImplementation&) = delete;
+    TestServiceImplementation& operator=(const TestServiceImplementation&) = delete;
 
 public:
-    TestDummyImplementation()
+    TestServiceImplementation()
         : _currentMemoryAllocation(0)
         , _lock()
         , _process()
@@ -21,14 +21,14 @@ public:
         _startResident = static_cast<uint32_t>(_process.Resident() >> 10);
     }
 
-    virtual ~TestDummyImplementation() { Free(); }
+    virtual ~TestServiceImplementation() { Free(); }
 
-    BEGIN_INTERFACE_MAP(TestDummyImplementation)
-    INTERFACE_ENTRY(Exchange::ITestDummy)
+    BEGIN_INTERFACE_MAP(TestServiceImplementation)
+    INTERFACE_ENTRY(Exchange::ITestService)
     END_INTERFACE_MAP
 
 public:
-    // ITestDummy methods
+    // ITestService methods
     uint32_t Malloc(uint32_t size) override;
     void Statm(uint32_t& allocated, uint32_t& size, uint32_t& resident) override;
     void Free(void) override;

@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef MODULE_NAME
-#define MODULE_NAME Plugin_TestDummy
+#define MODULE_NAME Plugin_TestService
 #endif
 
 #include <plugins/plugins.h>

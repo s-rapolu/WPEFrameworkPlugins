@@ -1,4 +1,4 @@
-set(PLUGIN_NAME TestDummy)
+set(PLUGIN_NAME TestService)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 message("Setting up ${PLUGIN_NAME}")
@@ -10,8 +10,8 @@ set(PLUGIN_OPTIONS)
 set(PLUGIN_SOURCES
         Module.cpp
         TestController.cpp
-        TestDummy.cpp
-        TestDummyImplementation.cpp)
+        TestService.cpp
+        TestServiceImplementation.cpp)
 
 # Library definition section
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})

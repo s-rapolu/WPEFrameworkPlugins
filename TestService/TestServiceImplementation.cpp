@@ -1,4 +1,4 @@
-#include "TestDummyImplementation.h"
+#include "TestServiceImplementation.h"
 
 #include <fstream>
 #include <iostream>
@@ -7,12 +7,12 @@
 #include <string.h>
 
 namespace WPEFramework {
-SERVICE_REGISTRATION(TestDummyImplementation, 1, 0);
+SERVICE_REGISTRATION(TestServiceImplementation, 1, 0);
 
-#define PENDING_CRASH_FILEPATH "/tmp/TestDummy.pending"
+#define PENDING_CRASH_FILEPATH "/tmp/TestService.pending"
 
-// ITestDummy methods
-uint32_t TestDummyImplementation::Malloc(uint32_t size) // size in Kb
+// ITestService methods
+uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
 {
     _lock.Lock();
 
@@ -40,11 +40,11 @@ uint32_t TestDummyImplementation::Malloc(uint32_t size) // size in Kb
     return _currentMemoryAllocation;
 }
 
-void TestDummyImplementation::Statm(uint32_t& allocated, uint32_t& size, uint32_t& resident)
+void TestServiceImplementation::Statm(uint32_t& allocated, uint32_t& size, uint32_t& resident)
 {
     _lock.Lock();
 
-    SYSLOG(Trace::Information, (_T("*** TestDummyImplementation::Statm ***")))
+    SYSLOG(Trace::Information, (_T("*** TestServiceImplementation::Statm ***")))
 
     allocated = _currentMemoryAllocation;
     size = static_cast<uint32_t>(_process.Allocated() >> 10);
@@ -54,11 +54,11 @@ void TestDummyImplementation::Statm(uint32_t& allocated, uint32_t& size, uint32_
     _lock.Unlock();
 }
 
-void TestDummyImplementation::Free(void)
+void TestServiceImplementation::Free(void)
 {
     _lock.Lock();
 
-    SYSLOG(Trace::Information, (_T("*** TestDummyImplementation::Free ***")))
+    SYSLOG(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
 
     if (!_memory.empty()) {
         for (auto const& memoryBlock : _memory) {
@@ -73,13 +73,13 @@ void TestDummyImplementation::Free(void)
     _lock.Unlock();
 }
 
-void TestDummyImplementation::DisableOOMKill()
+void TestServiceImplementation::DisableOOMKill()
 {
     int8_t oomNo = -17;
     _process.OOMAdjust(oomNo);
 }
 
-void TestDummyImplementation::LogMemoryUsage(void)
+void TestServiceImplementation::LogMemoryUsage(void)
 {
     SYSLOG(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
     SYSLOG(Trace::Information, (_T("*** Initial Size:     %lu Kb ***"), _startSize))
@@ -88,7 +88,7 @@ void TestDummyImplementation::LogMemoryUsage(void)
     SYSLOG(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
 }
 
-bool TestDummyImplementation::Configure(PluginHost::IShell* shell)
+bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
 {
     ASSERT(shell != nullptr);
     bool status = _config.FromString(shell->ConfigLine());
@@ -102,7 +102,7 @@ bool TestDummyImplementation::Configure(PluginHost::IShell* shell)
     return status;
 }
 
-void TestDummyImplementation::Crash()
+void TestServiceImplementation::Crash()
 {
     TRACE(Trace::Information, (_T("Preparing for crash...")));
     sleep(_crashDelay);
@@ -114,7 +114,7 @@ void TestDummyImplementation::Crash()
     return;
 }
 
-bool TestDummyImplementation::CrashNTimes(uint8_t n)
+bool TestServiceImplementation::CrashNTimes(uint8_t n)
 {
     bool status = true;
     uint8_t pendingCrashCount = PendingCrashCount();
@@ -134,7 +134,7 @@ bool TestDummyImplementation::CrashNTimes(uint8_t n)
     return status;
 }
 
-void TestDummyImplementation::ExecPendingCrash()
+void TestServiceImplementation::ExecPendingCrash()
 {
     uint8_t pendingCrashCount = PendingCrashCount();
     if (pendingCrashCount > 0) {
@@ -151,7 +151,7 @@ void TestDummyImplementation::ExecPendingCrash()
     return;
 }
 
-uint8_t TestDummyImplementation::PendingCrashCount()
+uint8_t TestServiceImplementation::PendingCrashCount()
 {
     uint8_t pendingCrashCount = 0;
 
@@ -172,7 +172,7 @@ uint8_t TestDummyImplementation::PendingCrashCount()
     return pendingCrashCount;
 }
 
-bool TestDummyImplementation::SetPendingCrashCount(uint8_t newCrashCount)
+bool TestServiceImplementation::SetPendingCrashCount(uint8_t newCrashCount)
 {
     bool status = false;
 

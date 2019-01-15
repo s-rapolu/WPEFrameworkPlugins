@@ -1,10 +1,10 @@
-#include "TestDummy.h"
+#include "TestService.h"
 
 using namespace std::placeholders;
 
 namespace WPEFramework
 {
-namespace TestDummy
+namespace TestService
 {
     Exchange::IMemory* MemoryObserver(const uint32_t pid)
     {
@@ -72,15 +72,15 @@ namespace TestDummy
 
         return (Core::Service<MemoryObserverImpl>::Create<Exchange::IMemory>(pid));
     }
-} // namespace TestDummy
+} // namespace TestService
 
 namespace Plugin
 {
-    SERVICE_REGISTRATION(TestDummy, 1, 0);
+    SERVICE_REGISTRATION(TestService, 1, 0);
 
-    static Core::ProxyPoolType<Web::JSONBodyType<TestDummy::Data> > jsonDataFactory(2);
+    static Core::ProxyPoolType<Web::JSONBodyType<TestService::Data> > jsonDataFactory(2);
 
-    /* virtual */ const string TestDummy::Initialize(PluginHost::IShell* service)
+    /* virtual */ const string TestService::Initialize(PluginHost::IShell* service)
     {
         /*Assume that everything is OK*/
         string message = EMPTY_STRING;
@@ -95,18 +95,18 @@ namespace Plugin
         _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
         _service->Register(&_notification);
 
-        _implementation = _service->Root<Exchange::ITestDummy>(_pid, ImplWaitTime, _T("TestDummyImplementation"));
+        _implementation = _service->Root<Exchange::ITestService>(_pid, ImplWaitTime, _T("TestServiceImplementation"));
 
         if ((_implementation != nullptr) && (_service != nullptr))
         {
-            _memory = WPEFramework::TestDummy::MemoryObserver(_pid);
+            _memory = WPEFramework::TestService::MemoryObserver(_pid);
             ASSERT(_memory != nullptr);
             _memory->Observe(_pid);
 
             ///////////////////// Start - Test Methods Definition: Memory ///////////////////////
-            auto statm = std::bind(&TestDummy::Statm, this, _1);
-            auto malloc = std::bind(&TestDummy::Malloc, this, _1);
-            auto free = std::bind(&TestDummy::Free, this, _1);
+            auto statm = std::bind(&TestService::Statm, this, _1);
+            auto malloc = std::bind(&TestService::Malloc, this, _1);
+            auto free = std::bind(&TestService::Free, this, _1);
 
             //ToDo: Try to simplify this initialization of functions parameters
             std::vector<std::string> statmIn_0({ "void", "", "no input argument required" });
@@ -131,8 +131,8 @@ namespace Plugin
             ///////////////////// End - Test Methods Definition: Memory ///////////////////////
 
             ///////////////////// Start - Test Methods Definition: Crash ///////////////////////
-            auto crash = std::bind(&TestDummy::Crash, this, _1);
-            auto crashNTimes = std::bind(&TestDummy::CrashNTimes, this, _1);
+            auto crash = std::bind(&TestService::Crash, this, _1);
+            auto crashNTimes = std::bind(&TestService::CrashNTimes, this, _1);
 
             //ToDo: Try to simplify this initialization of functions parameters
             std::vector<std::string> crashIn_0({ "void", "", "no input argument required" });
@@ -158,13 +158,13 @@ namespace Plugin
             _service = nullptr;
             _service->Unregister(&_notification);
 
-            SYSLOG(Trace::Fatal, (_T("*** TestDummy could not be instantiated ***")))
-            message = _T("TestDummy could not be instantiated.");
+            SYSLOG(Trace::Fatal, (_T("*** TestService could not be instantiated ***")))
+            message = _T("TestService could not be instantiated.");
         }
         return message;
     }
 
-    /* virtual */ void TestDummy::Deinitialize(PluginHost::IShell* service)
+    /* virtual */ void TestService::Deinitialize(PluginHost::IShell* service)
     {
         ASSERT(_service == service);
         ASSERT(_implementation != nullptr);
@@ -183,13 +183,13 @@ namespace Plugin
         _service = nullptr;
     }
 
-    /* virtual */ string TestDummy::Information() const
+    /* virtual */ string TestService::Information() const
     {
         // No additional info to report.
         return ((_T("The purpose of [%s] plugin is enabling expanding of the memory consumption."), _pluginName.c_str()));
     }
 
-    /* virtual */ void TestDummy::Inbound(Web::Request& request)
+    /* virtual */ void TestService::Inbound(Web::Request& request)
     {
         if (request.Verb == Web::Request::HTTP_POST)
         {
@@ -197,14 +197,14 @@ namespace Plugin
         }
     }
 
-    /* virtual */ Core::ProxyType<Web::Response> TestDummy::Process(const Web::Request& request)
+    /* virtual */ Core::ProxyType<Web::Response> TestService::Process(const Web::Request& request)
     {
         ASSERT(_skipURL <= request.Path.length());
 
         return _controller.Process(request, _skipURL);
     }
 
-    void TestDummy::ProcessTermination(uint32_t pid)
+    void TestService::ProcessTermination(uint32_t pid)
     {
         RPC::IRemoteProcess* process(_service->RemoteProcess(pid));
         if (process != nullptr)
@@ -214,12 +214,12 @@ namespace Plugin
         }
     }
 
-    void TestDummy::Activated(RPC::IRemoteProcess* /*process*/)
+    void TestService::Activated(RPC::IRemoteProcess* /*process*/)
     {
         return;
     }
 
-    void TestDummy::Deactivated(RPC::IRemoteProcess* process)
+    void TestService::Deactivated(RPC::IRemoteProcess* process)
     {
         if (_pid == process->Id())
         {
@@ -229,7 +229,7 @@ namespace Plugin
     }
 
     // Tests API
-    Core::ProxyType<Web::Response> TestDummy::Statm(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestService::Statm(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -244,7 +244,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> TestDummy::Malloc(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestService::Malloc(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -264,7 +264,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> TestDummy::Free(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestService::Free(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -276,7 +276,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> TestDummy::Crash(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestService::Crash(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -288,7 +288,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> TestDummy::CrashNTimes(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestService::CrashNTimes(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -308,7 +308,7 @@ namespace Plugin
         return result;
     }
 
-    void TestDummy::GetStatm(Data::Statm& statm)
+    void TestService::GetStatm(Data::Statm& statm)
     {
         ASSERT(_implementation != nullptr)
         uint32_t allocated, size, resident;
