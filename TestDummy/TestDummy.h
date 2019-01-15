@@ -3,7 +3,7 @@
 #include "Module.h"
 #include "TestClient.h"
 
-#include <interfaces/IMallocDummy.h>
+#include <interfaces/ITestDummy.h>
 #include <interfaces/IMemory.h>
 
 namespace WPEFramework
@@ -132,7 +132,7 @@ namespace Plugin
                 INTERFACE_ENTRY(PluginHost::IPlugin)
                 INTERFACE_ENTRY(PluginHost::IWeb)
                 INTERFACE_AGGREGATE(Exchange::IMemory, _memory)
-                INTERFACE_AGGREGATE(Exchange::IMallocDummy, _implementation)
+                INTERFACE_AGGREGATE(Exchange::ITestDummy, _implementation)
             END_INTERFACE_MAP
 
             //   IPlugin methods
@@ -162,7 +162,7 @@ namespace Plugin
             PluginHost::IShell* _service;
             Core::Sink<Notification> _notification;
             Exchange::IMemory* _memory;
-            Exchange::IMallocDummy* _implementation;
+            Exchange::ITestDummy* _implementation;
             string _pluginName;
             uint8_t _skipURL;
             uint32_t _pid;

@@ -4,18 +4,18 @@
 #include <iostream>
 
 #include "Module.h"
-#include <interfaces/IMallocDummy.h>
+#include <interfaces/ITestDummy.h>
 
 namespace WPEFramework
 {
-    class MallocDummyImplementation : public Exchange::IMallocDummy
+    class TestDummyImplementation : public Exchange::ITestDummy
     {
         private:
-            MallocDummyImplementation(const MallocDummyImplementation&) = delete;
-            MallocDummyImplementation& operator=(const MallocDummyImplementation&) = delete;
+            TestDummyImplementation(const TestDummyImplementation&) = delete;
+            TestDummyImplementation& operator=(const TestDummyImplementation&) = delete;
 
         public:
-            MallocDummyImplementation()
+            TestDummyImplementation()
                 : _currentMemoryAllocation(0)
                 , _lock()
                 , _process()
@@ -25,16 +25,16 @@ namespace WPEFramework
                 _startResident = static_cast<uint32_t>(_process.Resident() >>10);
             }
 
-            virtual ~MallocDummyImplementation()
+            virtual ~TestDummyImplementation()
             {
                 Free();
             }
 
-            BEGIN_INTERFACE_MAP(MallocDummyImplementation)
-                INTERFACE_ENTRY(Exchange::IMallocDummy)
+            BEGIN_INTERFACE_MAP(TestDummyImplementation)
+                INTERFACE_ENTRY(Exchange::ITestDummy)
             END_INTERFACE_MAP
 
-            // IMallocDummy methods
+            // ITestDummy methods
             uint32_t Malloc(uint32_t size) //size in Kb
             {
                 _lock.Lock();
@@ -70,7 +70,7 @@ namespace WPEFramework
             {
                 _lock.Lock();
 
-                SYSLOG(Trace::Information, (_T("*** MallocDummyImplementation::Statm ***")))
+                SYSLOG(Trace::Information, (_T("*** TestDummyImplementation::Statm ***")))
 
                 allocated = _currentMemoryAllocation;
                 size = static_cast<uint32_t>(_process.Allocated() >> 10);
@@ -84,7 +84,7 @@ namespace WPEFramework
             {
                 _lock.Lock();
 
-                SYSLOG(Trace::Information, (_T("*** MallocDummyImplementation::Free ***")))
+                SYSLOG(Trace::Information, (_T("*** TestDummyImplementation::Free ***")))
 
                 if (!_memory.empty())
                 {
@@ -113,13 +113,13 @@ namespace WPEFramework
             uint32_t _currentMemoryAllocation; //size in Kb
     };
 
-    void MallocDummyImplementation::DisableOOMKill()
+    void TestDummyImplementation::DisableOOMKill()
     {
         int8_t oomNo = -17;
         _process.OOMAdjust(oomNo);
     }
 
-    void MallocDummyImplementation::LogMemoryUsage(void)
+    void TestDummyImplementation::LogMemoryUsage(void)
     {
         SYSLOG(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
         SYSLOG(Trace::Information, (_T("*** Initial Size:     %lu Kb ***"), _startSize))
@@ -128,5 +128,5 @@ namespace WPEFramework
         SYSLOG(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >>10 )))
     }
 
-SERVICE_REGISTRATION(MallocDummyImplementation, 1, 0);
+SERVICE_REGISTRATION(TestDummyImplementation, 1, 0);
 }

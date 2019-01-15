@@ -95,7 +95,7 @@ namespace Plugin
         _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
         _service->Register(&_notification);
 
-        _implementation = _service->Root<Exchange::IMallocDummy>(_pid, 2000, _T("MallocDummyImplementation"));
+        _implementation = _service->Root<Exchange::ITestDummy>(_pid, 2000, _T("TestDummyImplementation"));
 
         if ((_implementation != nullptr) && (_service != nullptr))
         {
