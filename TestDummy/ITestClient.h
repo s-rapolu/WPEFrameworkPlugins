@@ -20,7 +20,6 @@ struct ITestClient {
     virtual bool Unregister(const string& name) = 0;
     virtual Core::ProxyType<Web::Response> Process(const Web::Request& request, uint8_t skipURL) = 0;
 
-private:
     virtual Core::ProxyType<Web::Response> GetMethods(void) = 0;
     virtual Core::ProxyType<Web::Response> GetMethodDescription(string methodName) = 0;
     virtual Core::ProxyType<Web::Response> GetMethodParameters(string methodName) = 0;

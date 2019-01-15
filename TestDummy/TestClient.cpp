@@ -94,7 +94,9 @@ Core::ProxyType<Web::Response> TestClient::GetMethods(void)
     Core::ProxyType<Web::JSONBodyType<TestData::Methods>> response(methodsFactory.Element());
     for (auto const& test : _tests) {
         for (auto const& method : test.second) {
-            response->MethodNames.Add(Core::JSON::String(method._name));
+                Core::JSON::String newMethod;
+                newMethod = method._name;
+                response->MethodNames.Add(newMethod);
         }
     }
 
@@ -160,7 +162,7 @@ Core::ProxyType<Web::Response> TestClient::GetMethodParameters(string methodName
                     newOutParam.Type = out.second[0];
                     newOutParam.Name = out.second[1];
                     newOutParam.Comment = out.second[2];
-                    response->Input.Add(newOutParam);
+                    response->Output.Add(newOutParam);
                 }
                 exit = true;
                 break;
