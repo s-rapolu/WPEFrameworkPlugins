@@ -1,51 +1,18 @@
 #pragma once
 
 #include "Module.h"
-#include "BluetoothJSONContainer.h"
-#include <interfaces/IBluetooth.h>
 #include "BlueDriver.h"
+#include "Bluetooth.h"
+
+#include <interfaces/IBluetooth.h>
 
 namespace WPEFramework {
 namespace Plugin {
 
-    class BluetoothControl : public PluginHost::IPlugin, public PluginHost::IWeb {
+    class BluetoothControl : public PluginHost::IPlugin, public PluginHost::IWeb, public Exchange::IBluetooth {
     private:
         BluetoothControl(const BluetoothControl&) = delete;
         BluetoothControl& operator=(const BluetoothControl&) = delete;
-
-        class Notification : public RPC::IRemoteProcess::INotification {
-
-        private:
-            Notification() = delete;
-            Notification(const Notification&) = delete;
-            Notification& operator=(const Notification&) = delete;
-
-        public:
-            explicit Notification(BluetoothControl* parent)
-                : _parent(*parent)
-            {
-                ASSERT(parent != nullptr);
-            }
-            ~Notification()
-            {
-            }
-
-        public:
-            virtual void Activated(RPC::IRemoteProcess*)
-            {
-            }
-            virtual void Deactivated(RPC::IRemoteProcess* process)
-            {
-                _parent.Deactivated(process);
-            }
-
-            BEGIN_INTERFACE_MAP(Notification)
-                INTERFACE_ENTRY(RPC::IRemoteProcess::INotification)
-            END_INTERFACE_MAP
-
-        private:
-            BluetoothControl& _parent;
-        };
 
         class Config : public Core::JSON::Container {
         private:
@@ -68,13 +35,134 @@ namespace Plugin {
         };
 
     public:
+        class EXTERNAL Device : public IBluetooth::IDevice {
+        private: 
+            Device& operator=(const Device&) = delete;
+
+            enum state : uint8_t {
+                DISCOVERED = 0x01,
+                PAIRED     = 0x02,
+                CONNECTED  = 0x04
+            };
+
+        public:
+            class JSON : public Core::JSON::Container {
+            private:
+                JSON& operator= (const JSON&);
+
+            public:
+                JSON()
+                    : Core::JSON::Container()
+                    , Address()
+                    , Name()
+                {
+                    Add(_T("address"), &Address);
+                    Add(_T("name"), &Name);
+                }
+                JSON(const JSON& copy)
+                    : Core::JSON::Container()
+                    , Address()
+                    , Name()
+                {
+                    Add(_T("address"), &Address);
+                    Add(_T("name"), &Name);
+                    Address = copy.Address;
+                    Name = copy.Name;
+                }
+                virtual ~JSON() {
+                }
+
+            public:
+                JSON& operator= (const IBluetooth::IDevice* source) {
+                    if (source != nullptr) {
+                        Address = source->Address();
+                        Name = source->Name();
+                    }
+                    else {
+                        Address.Clear();
+                        Name.Clear();
+                    }
+                    return (*this);
+                }
+                Core::JSON::String Address;
+                Core::JSON::String Name;
+            };
+
+        public:
+            Device () 
+                : _address()
+                , _name()
+                , _state(0) {
+            }
+            Device (const Bluetooth::Address& address, const string& name) 
+                : _address(address)
+                , _name(name)
+                , _state(0) {
+            }
+            Device (const Device& copy) 
+                : _address(copy._address)
+                , _name(copy._name) 
+                , _state(copy._state) {
+            }
+            ~Device() {
+            }
+
+        public:
+            virtual string Address() const override {
+                return (_address.ToString());
+            }
+            virtual string Name() const override {
+                return (_name);
+            }
+            virtual bool IsDiscovered () const override {
+                return ((_state & DISCOVERED) != 0);
+            }
+            virtual bool IsPaired() const override {
+                return ((_state & PAIRED) != 0);
+            }
+            virtual bool IsConnected() const override {
+                return ((_state & CONNECTED) != 0);
+            }
+
+            BEGIN_INTERFACE_MAP(Device)
+                INTERFACE_ENTRY(IBluetooth::IDevice)
+            END_INTERFACE_MAP
+
+        private:
+            Bluetooth::Address _address;
+            string _name;
+            uint8_t _state;
+        };
+
+        class EXTERNAL Status : public Core::JSON::Container {
+        private:
+            Status(const Status&) = delete;
+            Status& operator=(const Status&) = delete;
+
+        public:
+            Status()
+                : Scanning()
+                , DeviceList() {
+                Add(_T("scanning"), &Scanning);
+                Add(_T("deviceList"), &DeviceList);
+            }
+            virtual ~Status() {
+            }
+
+        public:
+            Core::JSON::Boolean Scanning;
+            Core::JSON::ArrayType<Device::JSON> DeviceList;
+        };
+
+    public:
         BluetoothControl()
-            : _service(nullptr)
-            , _bluetooth(nullptr)
-            , _notification(this)
+            : _skipURL(0)
+            , _service(nullptr)
+            , _driver(nullptr)
+            , _hciSocket(Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL))
+            , _btAddress()
         {
         }
-
         virtual ~BluetoothControl()
         {
         }
@@ -83,7 +171,7 @@ namespace Plugin {
         BEGIN_INTERFACE_MAP(BluetoothControl)
             INTERFACE_ENTRY(PluginHost::IPlugin)
             INTERFACE_ENTRY(PluginHost::IWeb)
-            INTERFACE_AGGREGATE(Exchange::IBluetooth, _bluetooth)
+            INTERFACE_ENTRY(Exchange::IBluetooth)
         END_INTERFACE_MAP
 
     public:
@@ -113,8 +201,18 @@ namespace Plugin {
         virtual void Inbound(Web::Request& request);
         virtual Core::ProxyType<Web::Response> Process(const Web::Request& request);
 
+        //  IBluetooth methods
+        // -------------------------------------------------------------------------------------------------------
+        virtual bool IsScanning() const override;
+        virtual uint32_t Register(IBluetooth::INotification* notification) override;
+        virtual uint32_t Unregister(IBluetooth::INotification* notification) override;
+
+        virtual bool Scan(const bool enable) override;
+        virtual bool Pair(const string&) override;
+        virtual bool Connect(const string&) override;
+        virtual bool Disconnect(const string&) override;
+
     private:
-        void Deactivated(RPC::IRemoteProcess* process);
         Core::ProxyType<Web::Response> GetMethod(Core::TextSegmentIterator& index);
         Core::ProxyType<Web::Response> PutMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> PostMethod(Core::TextSegmentIterator& index, const Web::Request& request);
@@ -122,11 +220,12 @@ namespace Plugin {
 
     private:
         uint8_t _skipURL;
-        uint32_t _pid;
         PluginHost::IShell* _service;
-        Core::Sink<Notification> _notification;
-        Exchange::IBluetooth* _bluetooth;
         Bluetooth::Driver* _driver;
+        Bluetooth::HCISocket _hciSocket;
+        Bluetooth::Address _btAddress;
+        std::list<IBluetooth::IDevice*> _devices;
+        std::list<IBluetooth::INotification*> _observers;
     };
 } //namespace Plugin
 

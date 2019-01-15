@@ -2,73 +2,83 @@
 
 namespace WPEFramework {
 
+#define ADAPTER_INDEX                   0X00
+#define ENABLE_MODE                     0x01
+
 namespace Plugin {
 
     SERVICE_REGISTRATION(BluetoothControl, 1, 0);
 
-    static Core::ProxyPoolType<Web::JSONBodyType<BTStatus> > jsonResponseFactoryBTStatus(1);
-    static Core::ProxyPoolType<Web::JSONBodyType<BTDeviceInfo> > jsonResponseFactoryBTDeviceInfo(1);
+    static Core::ProxyPoolType<Web::JSONBodyType<BluetoothControl::Device::JSON> > jsonResponseFactoryDevice(1);
+    static Core::ProxyPoolType<Web::JSONBodyType<BluetoothControl::Status> > jsonResponseFactoryStatus(1);
 
     /* virtual */ const string BluetoothControl::Initialize(PluginHost::IShell* service)
     {
-        string message;
+        string result;
 
         ASSERT(_service == nullptr);
+        ASSERT(_driver == nullptr);
 
-        _pid = 0;
         _service = service;
         _skipURL = _service->WebPrefix().length();
         _driver = Bluetooth::Driver::Instance(_service->ConfigLine());
 
         // First see if we can bring up the Driver....
         if (_driver != nullptr) {
-            // Register the Process::Notification stuff. The Remote process might die before we get a
-            // change to "register" the sink for these events !!! So do it ahead of instantiation.
-            // _service->Register(&_notification);
+            result = _T("Could not load the Bluetooth Driver.");
+        }
+        else {
+            Bluetooth::ManagementFrame mgmtFrame(ADAPTER_INDEX);
+            Bluetooth::SynchronousSocket channel (Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 128);
+            struct mgmt_mode modeFlags;
 
-            // _bluetooth = _service->Instantiate<Exchange::IBluetooth>(3000, _T("BluetoothControlImplementation"), static_cast<uint32_t>(~0), _pid, _service->Locator());
+            modeFlags.val = htobs(ENABLE_MODE);
 
-            // if (_bluetooth == nullptr) {
-            //     message = _T("BluetoothControl could not be instantiated.");
-            //     _service->Unregister(&_notification);
-            //     _service = nullptr;
-            // }
-            // else {
-            //    _bluetooth->Configure(_service);
-            //}
+            if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_POWERED, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to power on bluetooth adaptor";
+            }
+            // Enable Bondable on adaptor.
+            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_BONDABLE, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Bondable";
+            }
+            // Enable Simple Secure Simple Pairing.
+            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SSP, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Simple Secure Simple Pairing";
+            }
+            // Enable Low Energy
+            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_LE, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Low Energy";
+            }
+            // Enable Secure Connections
+            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SECURE_CONN, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Secure Connections";
+            }
+            // See if we can load the default Bleutooth address
+            else if (_btAddress.Default() == false) {
+                result = "Could not get the Bluetooth address";
+            }
+            else {
+                _hciSocket.LocalNode(_btAddress.NodeId());
+
+                if (_hciSocket.Open(100) != Core::ERROR_NONE) {
+                    result = "Could not open the HCI control channel";
+                }
+            }                
         }
 
-        return message;
+        if ( (_driver != nullptr) && (result.empty() == false) ) {
+            delete _driver;
+            _driver = nullptr;
+        }
+        return result;
     }
 
     /*virtual*/ void BluetoothControl::Deinitialize(PluginHost::IShell* service)
     {
         ASSERT(_service == service);
-        ASSERT(_bluetooth != nullptr);
         ASSERT(_driver != nullptr);
 
-        //_service->Unregister(&_notification);
-
-        //if (_bluetooth->Release() != Core::ERROR_DESTRUCTION_SUCCEEDED) {
-
-        //    ASSERT(_pid != 0);
-
-        //    TRACE_L1("BluetoothControl Plugin is not properly destructed. %d", _pid);
-
-        //    RPC::IRemoteProcess* process(_service->RemoteProcess(_pid));
-
-            // The process can disappear in the meantime...
-            //if (process != nullptr) {
-
-
-                // But if it did not dissapear in the meantime, forcefully terminate it. Shoot to kill :-)
-                //process->Terminate();
-                //process->Release();
-            //}
-        //}
-
         // Deinitialize what we initialized..
-        _bluetooth = nullptr;
         _service = nullptr;
 
         if (_driver != nullptr) {
@@ -92,7 +102,7 @@ namespace Plugin {
         if ((request.Verb == Web::Request::HTTP_PUT) || (request.Verb == Web::Request::HTTP_POST)) {
             if ((index.IsValid() == true) && (index.Next() && index.IsValid())) {
                 if ((index.Remainder() == _T("Pair")) || (index.Remainder() == _T("Connect")) || (index.Remainder() == _T("Disconnect")))
-                   request.Body(jsonResponseFactoryBTDeviceInfo.Element());
+                   request.Body(jsonResponseFactoryDevice.Element());
             }
         }
     }
@@ -105,23 +115,22 @@ namespace Plugin {
 
         Core::ProxyType<Web::Response> result;
         Core::TextSegmentIterator index(Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
+
         // By default, we are in front of any element, jump onto the first element, which is if, there is something an empty slot.
         index.Next();
 
-        if (_bluetooth != nullptr) {
-            if (request.Verb == Web::Request::HTTP_GET) {
+        if (request.Verb == Web::Request::HTTP_GET) {
 
-                result = GetMethod(index);
-            } else if (request.Verb == Web::Request::HTTP_PUT) {
+            result = GetMethod(index);
+        } else if (request.Verb == Web::Request::HTTP_PUT) {
 
-                result = PutMethod(index, request);
-            } else if (request.Verb == Web::Request::HTTP_POST) {
+            result = PutMethod(index, request);
+        } else if (request.Verb == Web::Request::HTTP_POST) {
 
-                result = PostMethod(index, request);
-            } else if (request.Verb == Web::Request::HTTP_DELETE) {
+            result = PostMethod(index, request);
+        } else if (request.Verb == Web::Request::HTTP_DELETE) {
 
-                result = DeleteMethod(index);
-            }
+            result = DeleteMethod(index);
         }
 
         return result;
@@ -139,9 +148,9 @@ namespace Plugin {
                 if (index.Remainder() == _T("DiscoveredDevices")) {
 
                     TRACE(Trace::Information, (string(__FUNCTION__)));
-                    Core::ProxyType<Web::JSONBodyType<BTStatus> > response(jsonResponseFactoryBTStatus.Element());
+                    Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
 
-                    std::string discoveredDevices = _bluetooth->DiscoveredDevices();
+                    std::string discoveredDevices;
                     if (discoveredDevices.size() > 0) {
                         response->DeviceList.FromString(discoveredDevices);
 
@@ -155,9 +164,9 @@ namespace Plugin {
                 } else if (index.Remainder() == _T("PairedDevices")) {
 
                     TRACE(Trace::Information, (string(__FUNCTION__)));
-                    Core::ProxyType<Web::JSONBodyType<BTStatus> > response(jsonResponseFactoryBTStatus.Element());
+                    Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
 
-                    std::string pairedDevices = _bluetooth->PairedDevices();
+                    std::string pairedDevices;
                     if (pairedDevices.size() > 0) {
                         response->DeviceList.FromString(pairedDevices);
 
@@ -171,13 +180,13 @@ namespace Plugin {
                 }
             }
         } else {
-            Core::ProxyType<Web::JSONBodyType<BTStatus> > response(jsonResponseFactoryBTStatus.Element());
+            Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
 
             result->ErrorCode = Web::STATUS_OK;
             result->Message = _T("Current status.");
 
-            response->Scanning = _bluetooth->IsScanning();
-            std::string connectedDevices = _bluetooth->ConnectedDevices();
+            response->Scanning = IsScanning();
+            std::string connectedDevices;
             if (connectedDevices.size() > 0)
                 response->DeviceList.FromString(connectedDevices);
 
@@ -198,7 +207,7 @@ namespace Plugin {
                 TRACE(Trace::Information, (string(__FUNCTION__)));
 
                 if (index.Remainder() == _T("Scan")) {
-                    if (_bluetooth->Scan()) {
+                    if (Scan(true) == Core::ERROR_NONE) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Scan started.");
                     } else {
@@ -206,7 +215,7 @@ namespace Plugin {
                         result->Message = _T("Unable to start Scan.");
                     }
                 } else if (index.Remainder() == _T("StopScan")) {
-                    if (_bluetooth->StopScan()) {
+                    if (Scan(false) == Core::ERROR_NONE) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Scan stopped.");
                     } else {
@@ -214,8 +223,8 @@ namespace Plugin {
                         result->Message = _T("Unable to stop Scan.");
                     }
                 } else if ((index.Remainder() == _T("Pair")) && (request.HasBody())) {
-                    Core::ProxyType<const BTDeviceInfo> deviceInfo (request.Body<const BTDeviceInfo>());
-                    if (_bluetooth->Pair(deviceInfo->Address)) {
+                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
+                    if (Pair(deviceInfo->Address)) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Paired device.");
                     } else {
@@ -223,8 +232,8 @@ namespace Plugin {
                         result->Message = _T("Unable to Pair device.");
                     }
                 } else if ((index.Remainder() == _T("Connect")) && (request.HasBody())) {
-                    Core::ProxyType<const BTDeviceInfo> deviceInfo (request.Body<const BTDeviceInfo>());
-                    if (_bluetooth->Connect(deviceInfo->Address)) {
+                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
+                    if (Connect(deviceInfo->Address)) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Connected device.");
                     } else {
@@ -232,8 +241,8 @@ namespace Plugin {
                         result->Message = _T("Unable to Connect device.");
                     }
                 } else if ((index.Remainder() == _T("Disconnect")) && (request.HasBody())) {
-                    Core::ProxyType<const BTDeviceInfo> deviceInfo (request.Body<const BTDeviceInfo>());
-                    if (_bluetooth->Disconnect(deviceInfo->Address)) {
+                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
+                    if (Disconnect(deviceInfo->Address)) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Disconnected device.");
                     } else {
@@ -265,16 +274,22 @@ namespace Plugin {
         return result;
     }
 
-    void BluetoothControl::Deactivated(RPC::IRemoteProcess* process)
-    {
-        if (process->Id() == _pid) {
 
-            ASSERT(_service != nullptr);
-
-            PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service,
-                PluginHost::IShell::DEACTIVATED,
-                PluginHost::IShell::FAILURE));
-        }
+    //  IBluetooth methods
+    // -------------------------------------------------------------------------------------------------------
+    /* virtual */ bool BluetoothControl::IsScanning() const {
+    }
+    /* virtual */ uint32_t BluetoothControl::Register(IBluetooth::INotification* notification) {
+    }
+    /* virtual */ uint32_t BluetoothControl::Unregister(IBluetooth::INotification* notification) {
+    }
+    /* virtual */ bool BluetoothControl::Scan(const bool enable) {
+    }
+    /* virtual */ bool BluetoothControl::Pair(const string& ) {
+    }
+    /* virtual */ bool BluetoothControl::Connect(const string&) {
+    }
+    /* virtual */ bool BluetoothControl::Disconnect(const string&) {
     }
 }
-} //namespace WPEFramework::Plugin
+}

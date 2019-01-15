@@ -1,14 +1,12 @@
-set(PLUGIN_NAME Bluetooth)
+set(PLUGIN_NAME BluetoothControl)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 message("Setting up ${PLUGIN_NAME}")
 
-find_package(GLIB REQUIRED)
 find_package(Bluez REQUIRED)
 
 set(PLUGIN_SOURCES
     BluetoothControl.cpp
-    BluetoothImplementation.cpp
     drivers/BCM43XX.cpp
     Module.cpp)
 
@@ -16,9 +14,10 @@ set(PLUGIN_BLUETOOTH_AUTOSTART true CACHE STRING true)
 set(PLUGIN_BLUETOOTH_OOP false CACHE STRING true)
 
 # Library definition section
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/drivers" ${GLIB_INCLUDE_DIRS} ${BLUEZ_INCLUDE_DIRS})
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/drivers" ${BLUEZ_INCLUDE_DIRS})
 add_library(${MODULE_NAME} SHARED ${PLUGIN_SOURCES})
-target_link_libraries(${MODULE_NAME} ${PLUGINS_LIBRARIES} ${GLIB_GIO_LIBRARIES} ${GLIB_LIBRARIES} ${BLUEZ_LIBRARIES})
+add_compiler_flags(${MODULE_NAME} "${PLUGINS_DEFINITIONS}")
+target_link_libraries(${MODULE_NAME} ${PLUGINS_LIBRARIES} ${GLIB_GIO_LIBRARIES} ${BLUEZ_LIBRARIES})
 
 # Library installation section
 string(TOLOWER ${NAMESPACE} STORAGENAME)

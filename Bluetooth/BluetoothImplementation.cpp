@@ -74,6 +74,7 @@ namespace Core {
         SocketBluetooth& operator=(const SocketBluetooth&) = delete;
 
     public:
+    public:
         SocketBluetooth( const Core::NodeId& localNode, const uint16_t bufferSize) :
             SocketPort((localNode.Extension() == BTPROTO_HCI ? SocketPort::RAW : SocketPort::SEQUENCED),localNode, Core::NodeId(), bufferSize, bufferSize) {
         }
@@ -91,6 +92,356 @@ namespace Core {
 
 } } // namespace WPEFramework::Core
 
+namespace WPEFramework {
+
+namespace Bluetooth {
+
+        class Address {
+        public:
+            Address() : _length(0) {
+            }
+            Address(const int handle) : _length(0) {
+                if (handle > 0) {
+                    if (hci_devba(handle, &_address) >= 0) {
+                        _length = sizeof(_address);
+                    }
+                }
+            }
+            Address(const TCHAR address[]) : _length(sizeof(_address)) {
+                ::memset(_address, 0, sizeof(_address));
+                str2ba(address, &_address);
+            }
+            Address(const Address& address) : _length(copy._length) {
+                ::memcpy (_address, address._address, sizeof(_address));
+            }
+            ~Address() {
+            }
+
+        public:
+            bool IsValid() const {
+                return (_length == sizeof(_address));
+            }
+            bool Default() {
+                _length = 0;
+                int deviceId = hci_get_route(nullptr);
+                if ((deviceId >= 0) && (hci_devba(deviceId, &_address) >= 0)) {
+                    _length = sizeof(_address);
+                }
+                return (IsValid());
+            }
+            const bdaddr_t* Data () const {
+                return (IsValid() ? &_address : nullptr);
+            }
+            uint8_t Length () const {
+                return (_length);
+            }
+            Core::NodeId NodeId() const {
+                Core::NodeId result;
+                int deviceId = hci_get_route(Data());
+
+                if (deviceId >= 0) {
+                    result = Core::NodeId(static_cast<uint16_t>(deviceId), 0);
+                }
+
+                return (result);
+            }
+ 
+            string ToString() const {
+                static constexpr _hexArray[] = "0123456789ABCDEF";
+                string result;
+
+                if (IsValid() == true) {
+                    for (uint8_t index = 1; index < _length; index++) {
+                        if (result.empty() == false) {
+                            result += ':';
+                        }
+                        result += _hexArray[(_address.b[index] >> 4) & 0x0F];
+                        result += _hexArray[_address.b[index] & 0x0F];
+                    }
+                }
+
+                return (result);
+            }
+
+        private:
+            bdaddr_t _address;
+            uint8_t _length;
+        };
+
+    struct IOutbound {
+
+        virtual IOutbound() {} = 0;
+
+        virtual uint16_t Serialize(uint8_t stream, const uint16_t length) const = 0;
+    }
+
+    class ManagementFrame : public IOutbound {
+    private: 
+        ManagementFrame() = delete;
+        ManagementFrame(const Managment&) = delete;
+        ManagementFrame& operator= (const Managment&) = delete;
+
+    public:
+        ManagementFrame(const uint16_t index)
+            : _offset(0)
+            , _maxSize(64)
+            , _buffer(reinterpret_cast<uint8_t*>(::malloc(_maxSize))) {
+            _mgmtHeader.index = htobs(index);
+            _mgmtHeader.len = 0;
+        }
+        virtual ~Managment() {
+            ::free (_buffer);
+        }
+           
+    public:
+        virtual uint16_t Serialize(uint8_t stream, const uint16_t length) const {
+            uint16_t result = 0;
+            if (_offset < sizeof(_mgmtHeader)) {
+                uint8_t copyLength = std::min(sizeof(_mgmtHeader) - _offset, length);
+                ::memcpy (stream, reinterpret_cast<const uint8_t*>(&_mgmtHeader)[_offset], copyLength);
+                result   = copyLength;
+                _offset += copyLength;
+            }
+            if (result < length) {
+                uint8_t copyLength = std::min(_mgmtHeader.len - (_offset - sizeof(_mgmtHeader)), length - result);
+                if (copyLength > 0) {
+                    ::memcpy (&(stream[result]), &(_buffer[_offset - sizeof(_mgmtHeader)]), copyLength);
+                    result  += copyLength;
+                    _offset += copyLength;
+                }
+            }
+            return (result);
+        }
+        template<typename VALUE>
+        inline ManagementFrame& Set (const uint16_t opcode, const VALUE& value) {
+            _offset = 0;
+
+            if (sizeof(VALUE) > _maxSize) {
+                ::free(_buffer);
+                _maxSize = sizeof(VALUE);
+                _buffer = reinterpret_cast<uint8_t*>(::malloc(_maxSize));
+            }
+            ::memcpy (_buffer, &value, sizeof(VALUE));
+            _mgmtHeader.len = htobs(sizeof(VALUE));
+            _mgmtHeader.opcode = htobs(opcode);
+
+            return (*this);
+        }
+    private:
+        uint16_t _offset;
+        uint16_t _maxSize;
+        struct mgmt_hdr _mgmtHeader;
+        uint8_t* _buffer;
+    };
+
+    class CommandFrame : public IOutbound {
+    private: 
+        CommandFrame() = delete;
+        CommandFrame(const Managment&) = delete;
+        CommandFrame& operator= (const Managment&) = delete;
+
+    public:
+        CommandFrame()
+            : _offset(0)
+            , _maxSize(64)
+            , _buffer(reinterpret_cast<uint8_t*>(::malloc(_maxSize)))
+            , _size(0) {
+        }
+        virtual ~CommandFrame() {
+            ::free (_buffer);
+        }
+           
+    public:
+        virtual uint16_t Serialize(uint8_t stream, const uint16_t length) const {
+            uint16_t copyLength = std::min(_size - _offset, length);
+            if (copyLength > 0) {
+                ::memcpy (stream, &(_buffer[_offset]), copyLength);
+                _offset += copyLength;
+            }
+            return (_copyLength);
+        }
+        template<typename VALUE>
+        inline CommandFrame& Set (const uint16_t opcode, const VALUE& value) {
+            _offset = 0;
+
+            if (sizeof(VALUE) > _maxSize) {
+                ::free(_buffer);
+                _maxSize = sizeof(VALUE);
+                _buffer = reinterpret_cast<uint8_t*>(::malloc(_maxSize));
+            }
+            ::memcpy (_buffer, &value, sizeof(VALUE));
+            _mgmtHeader.len = htobs(sizeof(VALUE));
+            _mgmtHeader.opcode = htobs(opcode);
+
+            return (*this);
+        }
+    private:
+        uint16_t _offset;
+        uint16_t _maxSize;
+        uint8_t* _buffer;
+        uint16_t _size;
+    };
+
+    class SynchronousSocket : public SocketBluetooth {
+    private:
+        SynchronousSocket() = delete;
+        SynchronousSocket(const SynchronousSocket&) = delete;
+        SynchronousSocket& operator=(const SynchronousSocket&) = delete;
+
+    public:
+        SynchronousSocket(const Core::NodeId& localNode, const uint16_t bufferSize) :
+            SocketPort((localNode.Extension() == BTPROTO_HCI ? SocketPort::RAW : SocketPort::SEQUENCED), localNode, Core::NodeId(), bufferSize, bufferSize) {
+        }
+        virtual ~SynchronousSocket() {
+        }
+
+        uint32_t Send(const IOutbound& message, const uint32_t waitTime) {
+
+            _adminLock.Lock();
+
+            uint32_t result = ClaimSlot(message, waitTime);
+
+            if (_outbound == &message) {
+
+                ASSERT (result == Core::ERROR_NONE);
+
+                _adminLock.Unlock();
+
+                Trigger();
+
+                result = CompletedSlot (message, waitTime);
+
+                _adminLock.Lock();
+
+                _outbound = nullptr;
+
+                Reevaluate();
+            }
+
+            _adminLock.Unlock();
+
+            return (result);
+        }
+
+    private:        
+        void Reevaluate() {
+            _reevaluate.SetEvent();
+
+            while (_waitCount != 0) {
+                SleepMs(0);
+            }
+
+            _reevaluate.ResetEvent();
+        }
+        uint32_t ClaimSlot (const IOutbound& request, const uint32_t allowedTime) {
+            uint32_t result = Core::ERROR_NONE;
+
+            while ( (IsOpen() == true) && (_outbound != nullptr) && (result == Core::ERROR_NONE) ) {
+
+                _waitCount++;
+
+                _adminLock.Unlock();
+
+                result = _reevaluate.Lock(allowedTime);
+
+                _waitCount--;
+
+                _adminLock.Lock();
+            }
+
+            if (_outbound == nullptr) {
+                if (IsOpen() == true) {
+                    _outbound = &request;
+                }
+                else {
+                    result = Core::ERROR_CONNECTION_CLOSED;
+                }
+            }
+
+            return (result);
+        }
+        uint32_t CompletedSlot (const IOutbound& request, const uint32_t allowedTime) {
+
+            uint32_t result = Core::ERROR_NONE;
+
+            if (_outbound == &request) {
+
+                _waitCount++;
+
+                _adminLock.Unlock();
+
+                result == _reevaluate.Lock(allowedTime);
+
+                _waitCount--;
+
+                _outbound.Lock();
+            }
+
+            if ((result == Core::ERROR_NONE) && (_outbound == &request)) {
+                result = Core::ERROR_ASYNC_ABORTED;
+            }
+
+            return (result);
+        }
+
+        // Methods to extract and insert data into the socket buffers
+        virtual uint16_t SendData(uint8_t* dataFrame, const uint16_t maxSendSize) override
+        {
+            uint16_t result = 0;
+
+            _responses.Lock();
+
+            if ( (_outbound != nullptr) && (_outound != reinterpret_cast<const IOutbound*>(~0)) ) {
+                result = _outbound->Serialize(dataFrame, maxSendSize);
+
+                if (result == 0) {
+                    _outbound = reinterpret_cast<const IOutbound*>(~0);
+                    Reevaluate();
+                }
+            }
+
+            _responses.Unlock();
+
+            return (result);
+        }
+        virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t availableData) override
+        {
+            return (availableData);
+        }
+        virtual void StateChange () override
+	{
+	    if (IsOpen() == false) {
+                _reevaluate.SetEvent();
+            }
+            else {
+                _reevaluate.ResetEvent();
+            }
+        }
+
+    private:
+        Core::CriticalSection _adminLock;
+        const IOutbound* _outbound;
+        Core::Event _reevaluate;
+        std::atomic<uint32_t> _waitCount;
+    };
+
+    class HCISocket : public SynchronousSocket {
+    private:
+        HCISocket() = delete;
+        HCISocket(const HCISocket&) = delete;
+        HCISocket& operator= (const HCISocket&) = delete;
+
+    public:
+        HCISocket(const NodeId& source) 
+            : SynchronousSocket(source, 256) {
+        }
+        virtual ~HCISocket() {
+        }
+
+    public:
+   };
+
+} } // namespace WPEFramework::Bluetooth
 
 namespace WPEFramework {
 
@@ -144,50 +495,44 @@ namespace Plugin {
     public:
         virtual uint32_t Configure(PluginHost::IShell* service)
         {
-            if (!ConfigureBTAdapter()) {
-                TRACE(Trace::Error,("Failed configuring Bluetooth Adapter"));
-                return -1;
+            ManagmentFrame mgmtFrame(ADAPTER_INDEX)
+            SynchronousSocket socket (Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 128);
+            struct mgmt_mode modeFlags;
+
+            modeFlags.val = htobs(ENABLE_MODE);
+
+            if (socket.Send(mgmtFrame.Set(MGMT_OP_SET_POWERED, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to power on bluetooth adaptor";
             }
-
-            _hciHandle = hci_get_route(NULL);
-            if (_hciHandle < 0) {
-                TRACE(Trace::Error, ("Failed to get HCI Device ID"));
-                return -1;
+            // Enable Bondable on adaptor.
+            else if (socket.Send(mgmtFrame.Set(MGMT_OP_SET_BONDABLE, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Bondable";
             }
-
-/* Open HCI device. Returns device descriptor (dd). 
-int hci_open_dev(int dev_id)
-{
-        struct sockaddr_hci a;
-        int dd, err;
-
-        dd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
-        if (dd < 0) return dd;
-
-        memset(&a, 0, sizeof(a));
-        a.hci_family = AF_BLUETOOTH;
-        a.hci_dev = dev_id;
-        if (bind(dd, (struct sockaddr *) &a, sizeof(a)) < 0)
-                goto failed;
-
-        return dd;
-}
-*/
-
-            _hciSocket = hci_open_dev(_hciHandle);
-            if (_hciSocket < 0) {
-                TRACE(Trace::Error, ("Failed to Open HCI Socket"));
-                return -1;
+            // Enable Simple Secure Simple Pairing.
+            else if (socket.Send(mgmtFrame.Set(MGMT_OP_SET_SSP, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Simple Secure Simple Pairing";
             }
+            // Enable Low Energy
+            else if (socket.Send(mgmtFrame.Set(MGMT_OP_SET_LE, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Low Energy";
+            }
+            // Enable Secure Connections
+            else if (socket.Send(mgmtFrame.Set(MGMT_OP_SET_SECURE_CONN, modeFlags), 1000) != Core::ERROR_NONE) {
+                result = "Failed to enable Secure Connections";
+            }
+            // See if we can load the default Bleutooth address
+            else if (_address.Default() == false) {
+                result = "Could not get the Bluetooth address";
+            }
+            else {
+                _hciSocket.LocalNode(_address.NodeId());
 
-            TRACE(Trace::Information, ("Configured Bluetooth Adapter"));
-            return 0;
-        }
+                if (_hciSocket.Open(100) != Core::ERROR_NONE) {
+                    result = "Could not open the HCI control socket";
+                }
+            }                
 
-        virtual uint32_t Worker()
-        {
-            // TODO
-            return 0;
+            return (message);
         }
 
     private:
@@ -196,7 +541,6 @@ int hci_open_dev(int dev_id)
         END_INTERFACE_MAP
 
     private:
-        bool ConfigureBTAdapter();
         bool Scan();
         bool StopScan();
         void GetDeviceName(uint8_t*, ssize_t, char*);
@@ -217,6 +561,7 @@ int hci_open_dev(int dev_id)
         bool PairDevice(string, uint32_t&, sockaddr_l2&);
 
     private:
+        Core::NodeId
         uint32_t _hciHandle;
         uint32_t _hciSocket;
         std::atomic<bool> _scanning;
@@ -228,87 +573,6 @@ int hci_open_dev(int dev_id)
         Core::JSON::ArrayType<BTDeviceInfo> _jsonConnectedDevices;
         Core::CriticalSection _scanningThreadLock;
         };
-
-    bool BluetoothImplementation::ConfigureBTAdapter()
-    {
-        int mgmtSocket;
-        sockaddr_hci hciSocketAddr;
-        struct mgmt_hdr mgmtHeader;
-        struct mgmt_mode setMode;
-        struct iovec iov[2];
-
-        // Opening MGMT Socket.
-        mgmtSocket = socket(PF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC | SOCK_NONBLOCK, BTPROTO_HCI);
-        if (mgmtSocket < 0) {
-            TRACE(Trace::Error, ("Failed to Open MGMT Socket"));
-            return false;
-        }
-
-        memset(&hciSocketAddr, 0, sizeof(hciSocketAddr));
-        hciSocketAddr.hci_family = AF_BLUETOOTH;
-        hciSocketAddr.hci_dev = HCI_DEV_NONE;
-        hciSocketAddr.hci_channel = HCI_CHANNEL_CONTROL;
-
-        if (bind(mgmtSocket, (sockaddr *)&hciSocketAddr, sizeof(hciSocketAddr)) < 0) {
-            TRACE(Trace::Error, ("Failed to bind MGMT Socket"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        mgmtHeader.index = htobs(ADAPTER_INDEX);
-        mgmtHeader.len = htobs(ONE_BYTE);
-        setMode.val = htobs(ENABLE_MODE);
-
-        iov[0].iov_base = &mgmtHeader;
-        iov[0].iov_len = MGMT_HDR_SIZE;
-        iov[1].iov_base = &setMode;
-        iov[1].iov_len = ONE_BYTE;
-
-        // Switch on the BT Adaptor.
-        mgmtHeader.opcode = htobs(MGMT_OP_SET_POWERED);
-        if (writev(mgmtSocket, iov, 2) < 0) {
-            TRACE(Trace::Error, ("Failed to power on bluetooth adaptor"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        // Enable Bondable on adaptor.
-        mgmtHeader.opcode = htobs(MGMT_OP_SET_BONDABLE);
-        if (writev(mgmtSocket, iov, 2) < 0) {
-            TRACE(Trace::Error, ("Failed to enable Bondable"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        // Enable Simple Secure Simple Pairing.
-        mgmtHeader.opcode = htobs(MGMT_OP_SET_SSP);
-        if (writev(mgmtSocket, iov, 2) < 0) {
-            TRACE(Trace::Error, ("Failed to enable Simple Secure Simple Pairing"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        // Enable Low Energy
-        mgmtHeader.opcode = htobs(MGMT_OP_SET_LE);
-        if (writev(mgmtSocket, iov, 2) < 0) {
-            TRACE(Trace::Error, ("Failed to enable Low Energy"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        // Enable Secure Connections
-        mgmtHeader.opcode = htobs(MGMT_OP_SET_SECURE_CONN);
-        if (writev(mgmtSocket, iov, 2) < 0) {
-            TRACE(Trace::Error, ("Failed to enable Secure Connections"));
-            close(mgmtSocket);
-            return false;
-        }
-
-        sleep(1);
-        close(mgmtSocket);
-
-        return true;
-    }
 
     void BluetoothImplementation::GetDeviceName(uint8_t* inputData, ssize_t inputDataLength, char* deviceName)
     {
