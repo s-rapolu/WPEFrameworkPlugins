@@ -9,8 +9,9 @@ set(PLUGIN_OPTIONS)
 
 set(PLUGIN_SOURCES
         Module.cpp
+        TestClient.cpp
         TestDummy.cpp
-        MallocDummyImplementation.cpp)
+        TestDummyImplementation.cpp)
 
 # Library definition section
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
