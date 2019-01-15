@@ -1,5 +1,6 @@
 #include "TestDummyImplementation.h"
 
+#include <fstream>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +8,8 @@
 
 namespace WPEFramework {
 SERVICE_REGISTRATION(TestDummyImplementation, 1, 0);
+
+#define PENDING_CRASH_FILEPATH "/tmp/TestDummy.pending"
 
 // ITestDummy methods
 uint32_t TestDummyImplementation::Malloc(uint32_t size) // size in Kb
@@ -85,34 +88,108 @@ void TestDummyImplementation::LogMemoryUsage(void)
     SYSLOG(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
 }
 
-bool Configure(PluginHost::IShell* shell)
+bool TestDummyImplementation::Configure(PluginHost::IShell* shell)
 {
-    // ToDo: add implementation
-    return true;
+    ASSERT(shell != nullptr);
+    bool status = _config.FromString(shell->ConfigLine());
+    if (status) {
+        _crashDelay = _config.CrashDelay.Value();
+        TRACE(Trace::Information, ("crash delay set to %d", _crashDelay));
+    } else {
+        TRACE(Trace::Information, ("crash delay default %d", _crashDelay));
+    }
+
+    return status;
 }
 
-void Crash()
+void TestDummyImplementation::Crash()
 {
-    // ToDo: add implementation
+    TRACE(Trace::Information, (_T("Preparing for crash...")));
+    sleep(_crashDelay);
+
+    TRACE(Trace::Information, (_T("Executing crash!")));
+    uint8_t* tmp = nullptr;
+    *tmp = 3; // segmentaion fault
+
     return;
 }
 
-bool CrashNTimes(uint8_t n)
+bool TestDummyImplementation::CrashNTimes(uint8_t n)
 {
-    // ToDo: add implementation
-    return true;
+    bool status = true;
+    uint8_t pendingCrashCount = PendingCrashCount();
+
+    if (pendingCrashCount != 0) {
+        status = false;
+        TRACE(Trace::Information, (_T("Pending crash already in progress")));
+    } else {
+        if (!SetPendingCrashCount(n)) {
+            TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
+            status = false;
+        } else {
+            ExecPendingCrash();
+        }
+    }
+
+    return status;
 }
 
-void ExecPendingCrash()
+void TestDummyImplementation::ExecPendingCrash()
 {
-    // ToDo: add implementation
-    return;
+    uint8_t pendingCrashCount = PendingCrashCount();
+    if (pendingCrashCount > 0) {
+        pendingCrashCount--;
+        if (SetPendingCrashCount(pendingCrashCount)) {
+            Crash();
+        } else {
+            TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
+        }
+    } else {
+        TRACE(Trace::Information, (_T("No pending crash")));
+    }
 }
 
-uint8_t PendingCrashCount()
+uint8_t TestDummyImplementation::PendingCrashCount()
 {
-    // ToDo: add implementation
-    return 0;
+    uint8_t pendingCrashCount = 0;
+
+    std::ifstream pendingCrashFile;
+    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
+
+    if (pendingCrashFile.is_open()) {
+        uint8_t readVal = 0;
+
+        pendingCrashFile >> readVal;
+        if (pendingCrashFile.good()) {
+            pendingCrashCount = readVal;
+        } else {
+            TRACE(Trace::Information, (_T("Failed to read value from pendingCrashFile")));
+        }
+    }
+
+    return pendingCrashCount;
+}
+
+bool TestDummyImplementation::SetPendingCrashCount(uint8_t newCrashCount)
+{
+    bool status = false;
+
+    std::ofstream pendingCrashFile;
+    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary | std::fstream::trunc);
+
+    if (pendingCrashFile.is_open()) {
+
+        pendingCrashFile << newCrashCount;
+
+        if (pendingCrashFile.good()) {
+            status = true;
+        } else {
+            TRACE(Trace::Information, (_T("Failed to write value to pendingCrashFile ")));
+        }
+        pendingCrashFile.close();
+    }
+
+    return status;
 }
 
 } // namespace WPEFramework
