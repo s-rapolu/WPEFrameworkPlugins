@@ -1,10 +1,10 @@
-#include "MallocDummy.h"
+#include "TestDummy.h"
 
 using namespace std::placeholders;
 
 namespace WPEFramework
 {
-namespace MallocDummy
+namespace TestDummy
 {
     Exchange::IMemory* MemoryObserver(const uint32_t pid)
     {
@@ -72,15 +72,15 @@ namespace MallocDummy
 
         return (Core::Service<MemoryObserverImpl>::Create<Exchange::IMemory>(pid));
     }
-} // namespace MallocDummy
+} // namespace TestDummy
 
 namespace Plugin
 {
-    SERVICE_REGISTRATION(MallocDummy, 1, 0);
+    SERVICE_REGISTRATION(TestDummy, 1, 0);
 
-    static Core::ProxyPoolType<Web::JSONBodyType<MallocDummy::Data> > jsonDataFactory(2);
+    static Core::ProxyPoolType<Web::JSONBodyType<TestDummy::Data> > jsonDataFactory(2);
 
-    /* virtual */ const string MallocDummy::Initialize(PluginHost::IShell* service)
+    /* virtual */ const string TestDummy::Initialize(PluginHost::IShell* service)
     {
         /*Assume that everything is OK*/
         string message = EMPTY_STRING;
@@ -99,14 +99,14 @@ namespace Plugin
 
         if ((_mallocDummy != nullptr) && (_service != nullptr))
         {
-            _memory = WPEFramework::MallocDummy::MemoryObserver(_pid);
+            _memory = WPEFramework::TestDummy::MemoryObserver(_pid);
             ASSERT(_memory != nullptr);
             _memory->Observe(_pid);
 
-            ///////////////////// Start - Test Methods Definition: MallocDummy ///////////////////////
-            auto statm = std::bind(&MallocDummy::Statm, this, _1);
-            auto malloc = std::bind(&MallocDummy::Malloc, this, _1);
-            auto free = std::bind(&MallocDummy::Free, this, _1);
+            ///////////////////// Start - Test Methods Definition: TestDummy ///////////////////////
+            auto statm = std::bind(&TestDummy::Statm, this, _1);
+            auto malloc = std::bind(&TestDummy::Malloc, this, _1);
+            auto free = std::bind(&TestDummy::Free, this, _1);
 
             //ToDo: Try to simplify this initialization of functions parameters
             std::vector<std::string> statmIn_0({ "void", "", "no input argument required" });
@@ -128,7 +128,7 @@ namespace Plugin
             _client.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
             _client.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
             _client.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
-            ///////////////////// End - Test Methods Definition: MallocDummy ///////////////////////
+            ///////////////////// End - Test Methods Definition: TestDummy ///////////////////////
         }
         else
         {
@@ -136,13 +136,13 @@ namespace Plugin
             _service = nullptr;
             _service->Unregister(&_notification);
 
-            SYSLOG(Trace::Fatal, (_T("*** MallocDummy could not be instantiated ***")))
-            message = _T("MallocDummy could not be instantiated.");
+            SYSLOG(Trace::Fatal, (_T("*** TestDummy could not be instantiated ***")))
+            message = _T("TestDummy could not be instantiated.");
         }
         return message;
     }
 
-    /* virtual */ void MallocDummy::Deinitialize(PluginHost::IShell* service)
+    /* virtual */ void TestDummy::Deinitialize(PluginHost::IShell* service)
     {
         ASSERT(_service == service);
         ASSERT(_mallocDummy != nullptr);
@@ -161,13 +161,13 @@ namespace Plugin
         _service = nullptr;
     }
 
-    /* virtual */ string MallocDummy::Information() const
+    /* virtual */ string TestDummy::Information() const
     {
         // No additional info to report.
         return ((_T("The purpose of [%s] plugin is enabling expanding of the memory consumption."), _pluginName.c_str()));
     }
 
-    /* virtual */ void MallocDummy::Inbound(Web::Request& request)
+    /* virtual */ void TestDummy::Inbound(Web::Request& request)
     {
         if (request.Verb == Web::Request::HTTP_POST)
         {
@@ -175,14 +175,14 @@ namespace Plugin
         }
     }
 
-    /* virtual */ Core::ProxyType<Web::Response> MallocDummy::Process(const Web::Request& request)
+    /* virtual */ Core::ProxyType<Web::Response> TestDummy::Process(const Web::Request& request)
     {
         ASSERT(_skipURL <= request.Path.length());
 
         return _client.Process(request, _skipURL);
     }
 
-    void MallocDummy::ProcessTermination(uint32_t pid)
+    void TestDummy::ProcessTermination(uint32_t pid)
     {
         RPC::IRemoteProcess* process(_service->RemoteProcess(pid));
         if (process != nullptr)
@@ -192,7 +192,7 @@ namespace Plugin
         }
     }
 
-    void MallocDummy::Deactivated(RPC::IRemoteProcess* process)
+    void TestDummy::Deactivated(RPC::IRemoteProcess* process)
     {
         if (_pid == process->Id())
         {
@@ -202,7 +202,7 @@ namespace Plugin
     }
 
     // Tests API
-    Core::ProxyType<Web::Response> MallocDummy::Statm(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestDummy::Statm(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -217,7 +217,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> MallocDummy::Malloc(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestDummy::Malloc(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -237,7 +237,7 @@ namespace Plugin
         return result;
     }
 
-    Core::ProxyType<Web::Response> MallocDummy::Free(const Web::Request& request)
+    Core::ProxyType<Web::Response> TestDummy::Free(const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_OK;
@@ -249,7 +249,7 @@ namespace Plugin
         return result;
     }
 
-    void MallocDummy::GetStatm(Data::Statm& statm)
+    void TestDummy::GetStatm(Data::Statm& statm)
     {
         ASSERT(_mallocDummy != nullptr)
         uint32_t allocated, size, resident;

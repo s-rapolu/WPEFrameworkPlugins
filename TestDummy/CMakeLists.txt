@@ -1,7 +1,7 @@
-set(PLUGIN_NAME MallocDummy)
+set(PLUGIN_NAME TestDummy)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-message("*** DAD Setting up *** ${PLUGIN_NAME}")
+message("Setting up ${PLUGIN_NAME}")
 
 include(module) # Setup default stuff needed for the cmake framework thingy.
 
@@ -9,7 +9,7 @@ set(PLUGIN_OPTIONS)
 
 set(PLUGIN_SOURCES
         Module.cpp
-        MallocDummy.cpp
+        TestDummy.cpp
         MallocDummyImplementation.cpp)
 
 # Library definition section

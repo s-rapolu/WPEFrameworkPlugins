@@ -30,6 +30,7 @@ namespace Exchange
 
     };
 }
+
 namespace Plugin
 {
 //ToDo: Move to separate module
@@ -88,7 +89,7 @@ namespace TestCore
             }
             //ToDo: Uncomment when this class will be mover to separate module
 #if 0
-            BEGIN_INTERFACE_MAP(MallocDummyImplementation)
+            BEGIN_INTERFACE_MAP(TestDummyImplementation)
                 INTERFACE_ENTRY(Exchange::IMallocDummy)
             END_INTERFACE_MAP
 #endif
@@ -289,7 +290,7 @@ namespace TestCore
             std::map<Web::Request::type, std::list<TestMethod>> _tests;
     };
 }
-    class MallocDummy : public PluginHost::IPlugin, public PluginHost::IWeb
+    class TestDummy : public PluginHost::IPlugin, public PluginHost::IWeb
     {
         private:
             class Notification : public RPC::IRemoteProcess::INotification
@@ -299,7 +300,7 @@ namespace TestCore
                     Notification(const Notification&) = delete;
 
                 public:
-                    explicit Notification(MallocDummy* parent)
+                    explicit Notification(TestDummy* parent)
                         : _parent(*parent)
                     {
                         ASSERT(parent != nullptr);
@@ -318,7 +319,7 @@ namespace TestCore
                     END_INTERFACE_MAP
 
                 private:
-                    MallocDummy& _parent;
+                    TestDummy& _parent;
             };
        public:
             class Data : public Core::JSON::Container
@@ -395,19 +396,19 @@ namespace TestCore
                     MallocData Malloc;
             };
 
-            MallocDummy()
+            TestDummy()
                 : _service(nullptr)
                 , _notification(this)
                 , _memory(nullptr)
                 , _mallocDummy(nullptr)
-                , _pluginName("MallocDummy")
+                , _pluginName("TestDummy")
                 , _skipURL(0)
                 , _pid(0)
                 , _client(){}
 
-            virtual ~MallocDummy() {}
+            virtual ~TestDummy() {}
 
-            BEGIN_INTERFACE_MAP(MallocDummy)
+            BEGIN_INTERFACE_MAP(TestDummy)
                 INTERFACE_ENTRY(PluginHost::IPlugin)
                 INTERFACE_ENTRY(PluginHost::IWeb)
                 INTERFACE_AGGREGATE(Exchange::IMemory, _memory)
@@ -426,8 +427,8 @@ namespace TestCore
             virtual Core::ProxyType<Web::Response> Process(const Web::Request& request);
 
         private:
-            MallocDummy(const MallocDummy&) = delete;
-            MallocDummy& operator=(const MallocDummy&) = delete;
+            TestDummy(const TestDummy&) = delete;
+            TestDummy& operator=(const TestDummy&) = delete;
 
             void Deactivated(RPC::IRemoteProcess* process);
             void ProcessTermination(uint32_t pid);
