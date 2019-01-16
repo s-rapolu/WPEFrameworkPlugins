@@ -91,6 +91,8 @@ void TestServiceImplementation::LogMemoryUsage(void)
 bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
 {
     ASSERT(shell != nullptr);
+    _lock.Lock();
+
     bool status = _config.FromString(shell->ConfigLine());
     if (status) {
         _crashDelay = _config.CrashDelay.Value();
@@ -98,6 +100,8 @@ bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
     } else {
         TRACE(Trace::Information, ("crash delay default %d", _crashDelay));
     }
+
+    _lock.Unlock();
 
     return status;
 }
@@ -154,10 +158,11 @@ void TestServiceImplementation::ExecPendingCrash()
 uint8_t TestServiceImplementation::PendingCrashCount()
 {
     uint8_t pendingCrashCount = 0;
-
     std::ifstream pendingCrashFile;
-    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
 
+    _lock.Lock();
+
+    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
     if (pendingCrashFile.is_open()) {
         uint8_t readVal = 0;
 
@@ -169,12 +174,15 @@ uint8_t TestServiceImplementation::PendingCrashCount()
         }
     }
 
+    _lock.Unlock();
+
     return pendingCrashCount;
 }
 
 bool TestServiceImplementation::SetPendingCrashCount(uint8_t newCrashCount)
 {
     bool status = false;
+    _lock.Lock();
 
     std::ofstream pendingCrashFile;
     pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary | std::fstream::trunc);
@@ -190,6 +198,8 @@ bool TestServiceImplementation::SetPendingCrashCount(uint8_t newCrashCount)
         }
         pendingCrashFile.close();
     }
+
+    _lock.Unlock();
 
     return status;
 }
