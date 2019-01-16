@@ -13,21 +13,25 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestData::MethodDescription>> metho
 static Core::ProxyPoolType<Web::JSONBodyType<TestData::Parameters>> parametersFactory(2);
 
 // ITestController methods
-bool TestController::Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
-    const std::map<int, std::vector<string>>& output, Web::Request::type requestType,
+bool TestController::Reqister(const string& name, const string& desciption,
+    const std::map<int, std::vector<string>>& input, const std::map<int, std::vector<string>>& output,
+    Web::Request::type requestType,
     const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest)
 {
     bool status = false;
     TestMethod newTestMethod(name, desciption, input, output, processRequest);
 
-    for (auto& test : _tests) {
-        if (test.first == requestType) {
+    for (auto& test : _tests)
+    {
+        if (test.first == requestType)
+        {
             test.second.push_back(newTestMethod);
             status = true;
         }
     }
 
-    if (!status) {
+    if (!status)
+    {
         SYSLOG(Trace::Fatal, (_T("Request type : %d is not supported"), requestType))
     }
 
@@ -52,11 +56,16 @@ Core::ProxyType<Web::Response> TestController::Process(const Web::Request& reque
     index.Next();
     index.Next();
 
-    if (index.Current().Text() != _T("Methods")) {
-        for (auto const& test : _tests) {
-            if (test.first == request.Verb) {
-                for (auto const& method : test.second) {
-                    if (method._name == index.Current().Text()) {
+    if (index.Current().Text() != _T("Methods"))
+    {
+        for (auto const& test : _tests)
+        {
+            if (test.first == request.Verb)
+            {
+                for (auto const& method : test.second)
+                {
+                    if (method._name == index.Current().Text())
+                    {
                         result = method._callback(request);
                         exit = true;
                         break;
@@ -66,17 +75,24 @@ Core::ProxyType<Web::Response> TestController::Process(const Web::Request& reque
             if (exit)
                 break;
         }
-    } else // Handle default /Methods/... request separately
+    }
+    else // Handle default /Methods/... request separately
     {
-        if (!index.Next()) {
+        if (!index.Next())
+        {
             result = GetMethods();
-        } else {
+        }
+        else
+        {
             string methodName = index.Current().Text();
             index.Next();
             string callType = index.Current().Text();
-            if (callType == _T("Description")) {
+            if (callType == _T("Description"))
+            {
                 result = GetMethodDescription(methodName);
-            } else if (callType == _T("Parameters")) {
+            }
+            else if (callType == _T("Parameters"))
+            {
                 result = GetMethodParameters(methodName);
             }
         }
@@ -92,11 +108,13 @@ Core::ProxyType<Web::Response> TestController::GetMethods(void)
     result->Message = (_T("Handle Methods request"));
 
     Core::ProxyType<Web::JSONBodyType<TestData::Methods>> response(methodsFactory.Element());
-    for (auto const& test : _tests) {
-        for (auto const& method : test.second) {
-                Core::JSON::String newMethod;
-                newMethod = method._name;
-                response->MethodNames.Add(newMethod);
+    for (auto const& test : _tests)
+    {
+        for (auto const& method : test.second)
+        {
+            Core::JSON::String newMethod;
+            newMethod = method._name;
+            response->MethodNames.Add(newMethod);
         }
     }
 
@@ -114,9 +132,12 @@ Core::ProxyType<Web::Response> TestController::GetMethodDescription(string metho
     result->Message = (_T("Handle Methods Description request"));
 
     Core::ProxyType<Web::JSONBodyType<TestData::MethodDescription>> response(methodDescriptionFactory.Element());
-    for (auto const& test : _tests) {
-        for (auto const& method : test.second) {
-            if (method._name == methodName) {
+    for (auto const& test : _tests)
+    {
+        for (auto const& method : test.second)
+        {
+            if (method._name == methodName)
+            {
                 response->Description = method._description;
                 exit = true;
                 break;
@@ -126,7 +147,8 @@ Core::ProxyType<Web::Response> TestController::GetMethodDescription(string metho
             break;
     }
 
-    if (!exit) {
+    if (!exit)
+    {
         result->Message = _T("Method not supported");
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
     }
@@ -145,11 +167,15 @@ Core::ProxyType<Web::Response> TestController::GetMethodParameters(string method
     result->Message = (_T("Handle Methods Parameters request"));
 
     Core::ProxyType<Web::JSONBodyType<TestData::Parameters>> response(parametersFactory.Element());
-    for (auto const& test : _tests) {
-        for (auto const& method : test.second) {
-            if (method._name == methodName) {
+    for (auto const& test : _tests)
+    {
+        for (auto const& method : test.second)
+        {
+            if (method._name == methodName)
+            {
                 // ToDo: Fill Parameters
-                for (auto const& in : method._input) {
+                for (auto const& in : method._input)
+                {
                     TestData::Parameters::Parameter newInParam;
                     newInParam.Type = in.second[0];
                     newInParam.Name = in.second[1];
@@ -157,7 +183,8 @@ Core::ProxyType<Web::Response> TestController::GetMethodParameters(string method
                     response->Input.Add(newInParam);
                 }
 
-                for (auto const& out : method._output) {
+                for (auto const& out : method._output)
+                {
                     TestData::Parameters::Parameter newOutParam;
                     newOutParam.Type = out.second[0];
                     newOutParam.Name = out.second[1];
@@ -172,7 +199,8 @@ Core::ProxyType<Web::Response> TestController::GetMethodParameters(string method
             break;
     }
 
-    if (!exit) {
+    if (!exit)
+    {
         result->Message = _T("Method not supported");
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
     }

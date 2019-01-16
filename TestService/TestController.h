@@ -52,7 +52,8 @@ public:
 
     virtual ~TestController()
     {
-        for (auto& test : _tests) {
+        for (auto& test : _tests)
+        {
             test.second.clear();
         }
         _tests.clear();

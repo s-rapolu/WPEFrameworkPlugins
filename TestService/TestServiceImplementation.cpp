@@ -21,14 +21,17 @@ uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
     uint32_t blockSize = (32 * (getpagesize() >> 10)); // 128kB block size
     uint32_t runs = (uint32_t)size / blockSize;
 
-    for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks) {
+    for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
+    {
         _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
-        if (!_memory.back()) {
+        if (!_memory.back())
+        {
             SYSLOG(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
             break;
         }
 
-        for (uint32_t index = 0; index < (blockSize << 10); index++) {
+        for (uint32_t index = 0; index < (blockSize << 10); index++)
+        {
             static_cast<unsigned char*>(_memory.back())[index] = static_cast<unsigned char>(rand() & 0xFF);
         }
     }
@@ -60,8 +63,10 @@ void TestServiceImplementation::Free(void)
 
     SYSLOG(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
 
-    if (!_memory.empty()) {
-        for (auto const& memoryBlock : _memory) {
+    if (!_memory.empty())
+    {
+        for (auto const& memoryBlock : _memory)
+        {
             free(memoryBlock);
         }
         _memory.clear();
@@ -94,10 +99,13 @@ bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
     _lock.Lock();
 
     bool status = _config.FromString(shell->ConfigLine());
-    if (status) {
+    if (status)
+    {
         _crashDelay = _config.CrashDelay.Value();
         TRACE(Trace::Information, (_T("Set crash delay = %d"), _crashDelay));
-    } else {
+    }
+    else
+    {
         TRACE(Trace::Information, (_T("Set default crash delay = %d"), _crashDelay));
     }
 
@@ -123,14 +131,20 @@ bool TestServiceImplementation::CrashNTimes(uint8_t n)
     bool status = true;
     uint8_t pendingCrashCount = PendingCrashCount();
 
-    if (pendingCrashCount != 0) {
+    if (pendingCrashCount != 0)
+    {
         status = false;
         TRACE(Trace::Information, (_T("Pending crash already in progress")));
-    } else {
-        if (!SetPendingCrashCount(n)) {
+    }
+    else
+    {
+        if (!SetPendingCrashCount(n))
+        {
             TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
             status = false;
-        } else {
+        }
+        else
+        {
             ExecPendingCrash();
         }
     }
@@ -141,14 +155,20 @@ bool TestServiceImplementation::CrashNTimes(uint8_t n)
 void TestServiceImplementation::ExecPendingCrash()
 {
     uint8_t pendingCrashCount = PendingCrashCount();
-    if (pendingCrashCount > 0) {
+    if (pendingCrashCount > 0)
+    {
         pendingCrashCount--;
-        if (SetPendingCrashCount(pendingCrashCount)) {
+        if (SetPendingCrashCount(pendingCrashCount))
+        {
             Crash();
-        } else {
+        }
+        else
+        {
             TRACE(Trace::Fatal, (_T("Failed to set new pending crash count")));
         }
-    } else {
+    }
+    else
+    {
         TRACE(Trace::Information, (_T("No pending crash")));
     }
 
@@ -163,13 +183,17 @@ uint8_t TestServiceImplementation::PendingCrashCount()
     _lock.Lock();
 
     pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
-    if (pendingCrashFile.is_open()) {
+    if (pendingCrashFile.is_open())
+    {
         uint8_t readVal = 0;
 
         pendingCrashFile >> readVal;
-        if (pendingCrashFile.good()) {
+        if (pendingCrashFile.good())
+        {
             pendingCrashCount = readVal;
-        } else {
+        }
+        else
+        {
             TRACE(Trace::Information, (_T("Failed to read value from pendingCrashFile")));
         }
     }
@@ -187,13 +211,17 @@ bool TestServiceImplementation::SetPendingCrashCount(uint8_t newCrashCount)
     std::ofstream pendingCrashFile;
     pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary | std::fstream::trunc);
 
-    if (pendingCrashFile.is_open()) {
+    if (pendingCrashFile.is_open())
+    {
 
         pendingCrashFile << newCrashCount;
 
-        if (pendingCrashFile.good()) {
+        if (pendingCrashFile.good())
+        {
             status = true;
-        } else {
+        }
+        else
+        {
             TRACE(Trace::Information, (_T("Failed to write value to pendingCrashFile ")));
         }
         pendingCrashFile.close();
