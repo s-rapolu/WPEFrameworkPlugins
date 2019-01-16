@@ -9,7 +9,7 @@
 namespace WPEFramework {
 SERVICE_REGISTRATION(TestServiceImplementation, 1, 0);
 
-#define PENDING_CRASH_FILEPATH "/tmp/TestService.pending"
+static constexpr const char PendingCrashFilepath[] = "/tmp/TestService.pending";
 
 // ITestService methods
 uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
@@ -182,7 +182,7 @@ uint8_t TestServiceImplementation::PendingCrashCount()
 
     _lock.Lock();
 
-    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary);
+    pendingCrashFile.open(PendingCrashFilepath, std::fstream::binary);
     if (pendingCrashFile.is_open())
     {
         uint8_t readVal = 0;
@@ -209,7 +209,7 @@ bool TestServiceImplementation::SetPendingCrashCount(uint8_t newCrashCount)
     _lock.Lock();
 
     std::ofstream pendingCrashFile;
-    pendingCrashFile.open(PENDING_CRASH_FILEPATH, std::fstream::binary | std::fstream::trunc);
+    pendingCrashFile.open(PendingCrashFilepath, std::fstream::binary | std::fstream::trunc);
 
     if (pendingCrashFile.is_open())
     {

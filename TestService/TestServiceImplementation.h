@@ -5,6 +5,7 @@
 #include <interfaces/ITestService.h>
 
 namespace WPEFramework {
+
 class TestServiceImplementation : public Exchange::ITestService {
 private:
     TestServiceImplementation(const TestServiceImplementation&) = delete;
