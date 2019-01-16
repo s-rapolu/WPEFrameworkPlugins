@@ -143,7 +143,7 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestService::Data>> jsonDataFactory
         _service = nullptr;
         _service->Unregister(&_notification);
 
-        SYSLOG(Trace::Fatal, (_T("*** TestService could not be instantiated ***")))
+        TRACE(Trace::Fatal, (_T("*** TestService could not be instantiated ***")))
         message = _T("TestService could not be instantiated.");
     }
     return message;
@@ -156,7 +156,7 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestService::Data>> jsonDataFactory
     ASSERT(_memory != nullptr);
     ASSERT(_pid);
 
-    SYSLOG(Trace::Information, (_T("*** OutOfProcess Plugin is properly destructed. PID: %d ***"), _pid))
+    TRACE(Trace::Information, (_T("*** OutOfProcess Plugin is properly destructed. PID: %d ***"), _pid))
 
     // ToDo: Unregister tests are missing
 

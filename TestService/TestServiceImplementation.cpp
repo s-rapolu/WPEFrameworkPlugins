@@ -16,7 +16,7 @@ uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
 {
     _lock.Lock();
 
-    SYSLOG(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
+    TRACE(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
     uint32_t noOfBlocks = 0;
     uint32_t blockSize = (32 * (getpagesize() >> 10)); // 128kB block size
     uint32_t runs = (uint32_t)size / blockSize;
@@ -26,7 +26,7 @@ uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
         _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
         if (!_memory.back())
         {
-            SYSLOG(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
+            TRACE(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
             break;
         }
 
@@ -47,7 +47,7 @@ void TestServiceImplementation::Statm(uint32_t& allocated, uint32_t& size, uint3
 {
     _lock.Lock();
 
-    SYSLOG(Trace::Information, (_T("*** TestServiceImplementation::Statm ***")))
+    TRACE(Trace::Information, (_T("*** TestServiceImplementation::Statm ***")))
 
     allocated = _currentMemoryAllocation;
     size = static_cast<uint32_t>(_process.Allocated() >> 10);
@@ -61,7 +61,7 @@ void TestServiceImplementation::Free(void)
 {
     _lock.Lock();
 
-    SYSLOG(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
+    TRACE(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
 
     if (!_memory.empty())
     {
@@ -86,11 +86,11 @@ void TestServiceImplementation::DisableOOMKill()
 
 void TestServiceImplementation::LogMemoryUsage(void)
 {
-    SYSLOG(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
-    SYSLOG(Trace::Information, (_T("*** Initial Size:     %lu Kb ***"), _startSize))
-    SYSLOG(Trace::Information, (_T("*** Initial Resident: %lu Kb ***"), _startResident))
-    SYSLOG(Trace::Information, (_T("*** Size:     %lu Kb ***"), static_cast<uint32_t>(_process.Allocated() >> 10)))
-    SYSLOG(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
+    TRACE(Trace::Information, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
+    TRACE(Trace::Information, (_T("*** Initial Size:     %lu Kb ***"), _startSize))
+    TRACE(Trace::Information, (_T("*** Initial Resident: %lu Kb ***"), _startResident))
+    TRACE(Trace::Information, (_T("*** Size:     %lu Kb ***"), static_cast<uint32_t>(_process.Allocated() >> 10)))
+    TRACE(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
 }
 
 bool TestServiceImplementation::Configure(PluginHost::IShell* shell)

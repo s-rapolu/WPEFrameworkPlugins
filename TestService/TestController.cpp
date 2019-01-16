@@ -32,7 +32,7 @@ bool TestController::Reqister(const string& name, const string& desciption,
 
     if (!status)
     {
-        SYSLOG(Trace::Fatal, (_T("Request type : %d is not supported"), requestType))
+        TRACE(Trace::Fatal, (_T("Request type : %d is not supported"), requestType))
     }
 
     return status;
