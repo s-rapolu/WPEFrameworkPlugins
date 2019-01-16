@@ -236,16 +236,24 @@ Core::ProxyType<Web::Response> TestService::Malloc(const Web::Request& request)
     result->ErrorCode = Web::STATUS_OK;
     result->Message = (_T("Handle Malloc request for the [%s] service"), _pluginName.c_str());
 
-    uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
+    if (request.HasBody())
+    {
+        uint32_t memAllocation = request.Body<const Data>()->Malloc.Size.Value();
 
-    ASSERT(_implementation != nullptr)
-    _implementation->Malloc(memAllocation);
+        ASSERT(_implementation != nullptr)
+        _implementation->Malloc(memAllocation);
 
-    Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
-    GetStatm(response->Memory);
+        Core::ProxyType<Web::JSONBodyType<Data>> response(jsonDataFactory.Element());
+        GetStatm(response->Memory);
 
-    result->ContentType = Web::MIMETypes::MIME_JSON;
-    result->Body(Core::proxy_cast<Web::IBody>(response));
+        result->ContentType = Web::MIMETypes::MIME_JSON;
+        result->Body(Core::proxy_cast<Web::IBody>(response));
+    }
+    else
+    {
+        result->ErrorCode = Web::STATUS_BAD_REQUEST;
+        result->Message = (_T("Missing body for CrashNTimes request"));
+    }
 
     return result;
 }
