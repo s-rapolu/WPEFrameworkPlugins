@@ -170,6 +170,7 @@ private:
 
     void Activated(RPC::IRemoteProcess* process);
     void Deactivated(RPC::IRemoteProcess* process);
+
     void ProcessTermination(uint32_t pid);
     void GetStatm(Data::Statm& statm);
 
@@ -177,6 +178,7 @@ private:
     Core::ProxyType<Web::Response> Statm(const Web::Request& request);
     Core::ProxyType<Web::Response> Malloc(const Web::Request& request);
     Core::ProxyType<Web::Response> Free(const Web::Request& request);
+    // Crash Test Methods
     Core::ProxyType<Web::Response> Crash(const Web::Request& request);
     Core::ProxyType<Web::Response> CrashNTimes(const Web::Request& request);
 
@@ -184,6 +186,7 @@ private:
     Core::Sink<Notification> _notification;
     Exchange::IMemory* _memory;
     Exchange::ITestService* _implementation;
+
     string _pluginName;
     uint8_t _skipURL;
     uint32_t _pid;
