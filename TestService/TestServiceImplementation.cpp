@@ -96,9 +96,9 @@ bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
     bool status = _config.FromString(shell->ConfigLine());
     if (status) {
         _crashDelay = _config.CrashDelay.Value();
-        TRACE(Trace::Information, ("crash delay set to %d", _crashDelay));
+        TRACE(Trace::Information, (_T("Set crash delay = %d"), _crashDelay));
     } else {
-        TRACE(Trace::Information, ("crash delay default %d", _crashDelay));
+        TRACE(Trace::Information, (_T("Set default crash delay = %d"), _crashDelay));
     }
 
     _lock.Unlock();
@@ -108,10 +108,10 @@ bool TestServiceImplementation::Configure(PluginHost::IShell* shell)
 
 void TestServiceImplementation::Crash()
 {
-    TRACE(Trace::Information, (_T("Preparing for crash...")));
+    TRACE(Trace::Information, (_T("Crash in %d..."), _crashDelay));
     sleep(_crashDelay);
-
     TRACE(Trace::Information, (_T("Executing crash!")));
+
     uint8_t* tmp = nullptr;
     *tmp = 3; // segmentaion fault
 
