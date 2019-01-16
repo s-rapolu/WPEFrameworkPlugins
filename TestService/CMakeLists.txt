@@ -9,9 +9,10 @@ set(PLUGIN_OPTIONS)
 
 set(PLUGIN_SOURCES
         Module.cpp
-        TestController.cpp
         TestService.cpp
-        TestServiceImplementation.cpp)
+        TestController.cpp
+        TestControllerImplementation.cpp
+        MemoryAllocation.cpp)
 
 # Library definition section
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})

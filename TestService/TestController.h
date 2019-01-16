@@ -2,83 +2,80 @@
 
 #include "Module.h"
 
-#include "ITestController.h"
-#include "TestData.h"
+#include <interfaces/ITest.h>
 
-#include <vector>
+#include <list>
 
 namespace WPEFramework {
-namespace Plugin {
 namespace TestCore {
 
-class TestController : public Exchange::ITestController {
-private:
-    class TestMethod {
-    private:
-        TestMethod& operator=(const TestMethod&) = delete;
-
-    public:
-        TestMethod(string name, string desciption, const std::map<int, std::vector<string>>& input,
-            const std::map<int, std::vector<string>>& output,
-            const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& callback)
-            : _name(name)
-            , _description(desciption)
-            , _input(input)
-            , _output(output)
-            , _callback(callback)
-        {
-        }
-
-        virtual ~TestMethod() {}
-
-    public:
-        string _name;
-        string _description;
-        std::map<int, std::vector<string>> _input;
-        std::map<int, std::vector<string>> _output;
-        std::function<Core::ProxyType<Web::Response>(const Web::Request&)> _callback;
-    };
-
+class TestController {
 private:
     TestController(const TestController&) = delete;
     TestController& operator=(const TestController&) = delete;
+    TestController()
+        : _adminLock()
+        , _testAreas()
+    {
+    }
 
 public:
-    TestController()
-    {
-        _tests.insert(std::pair<Web::Request::type, std::list<TestMethod>>(Web::Request::type::HTTP_POST, {}));
-        _tests.insert(std::pair<Web::Request::type, std::list<TestMethod>>(Web::Request::type::HTTP_GET, {}));
-    }
+    static TestController& Instance();
 
     virtual ~TestController()
     {
-        for (auto& test : _tests)
-        {
-            test.second.clear();
-        }
-        _tests.clear();
     }
 
-    // ITestController methods
-    bool Reqister(const string& name,
-                  const string& desciption,
-                  const std::map<int, std::vector<string>>& input,
-                  const std::map<int, std::vector<string>>& output,
-                  const Web::Request::type requestType,
-                  const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest) override;
+    // TestControllerImplementation methods
+    typedef Core::IteratorType<std::list<Exchange::ITest*>, Exchange::ITest*> Iterator;
+    inline Iterator Producers() { return (Iterator(_testAreas)); } //ToDo: Not sure whether it is needed
 
-    bool Unregister(const string& name) override;
-    Core::ProxyType<Web::Response> Process(const Web::Request& request, const uint8_t skipURL) override;
+    void Announce(Exchange::ITest& testsArea)
+    {
+        _adminLock.Lock();
+
+        auto index(std::find(_testAreas.begin(), _testAreas.end(), &testsArea));
+
+        // Announce a tests area only once
+        ASSERT(index == _testAreas.end());
+
+        if (index == _testAreas.end())
+        {
+            _testAreas.push_back(&testsArea);
+        }
+
+        _adminLock.Unlock();
+    }
+    void Revoke(Exchange::ITest& testsArea)
+    {
+        _adminLock.Lock();
+
+        auto index(std::find(_testAreas.begin(), _testAreas.end(), &testsArea));
+
+        // Only revoke test areas you subscribed !!!!
+        ASSERT(index != _testAreas.end());
+
+        if (index != _testAreas.end())
+        {
+            _testAreas.erase(index);
+        }
+
+        _adminLock.Unlock();
+    }
+
+    void RevokeAll()
+    {
+        _adminLock.Lock();
+
+        _testAreas.clear();
+
+        _adminLock.Unlock();
+    }
 
 private:
-    Core::ProxyType<Web::Response> GetMethods(void) override;
-    Core::ProxyType<Web::Response> GetMethodDescription(const string& methodName) override;
-    Core::ProxyType<Web::Response> GetMethodParameters(const string& methodName) override;
-
-private:
-    std::map<Web::Request::type, std::list<TestMethod>> _tests;
+    Core::CriticalSection _adminLock;
+    std::list<Exchange::ITest*> _testAreas;
 };
 
 } // namespace TestCore
-} // namespace Plugin
 } // namespace WPEFramework

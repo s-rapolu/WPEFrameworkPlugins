@@ -1,17 +1,14 @@
 #pragma once
 
 #include "Module.h"
-#include "TestController.h"
-
 #include <interfaces/IMemory.h>
-#include <interfaces/ITestService.h>
+#include <interfaces/ITestController.h>
+#include "TestController.h"
 
 namespace WPEFramework {
 namespace Plugin {
 
-class TestService
-    : public PluginHost::IPlugin
-    , public PluginHost::IWeb {
+class TestService : public PluginHost::IPlugin, public PluginHost::IWeb {
 public:
     // maximum wait time for process to be spawned
     static constexpr uint32_t ImplWaitTime = 1000;
@@ -44,103 +41,14 @@ private:
     };
 
 public:
-    class Data : public Core::JSON::Container {
-    public:
-        class Statm : public Core::JSON::Container {
-        private:
-            Statm(const Statm&) = delete;
-            Statm& operator=(const Statm&) = delete;
-
-        public:
-            Statm()
-                : Core::JSON::Container()
-                , Allocated(0)
-                , Size(0)
-                , Resident(0)
-            {
-                Add(_T("allocated"), &Allocated);
-                Add(_T("size"), &Size);
-                Add(_T("resident"), &Resident);
-            }
-            ~Statm() {}
-
-        public:
-            Core::JSON::DecSInt32 Allocated;
-            Core::JSON::DecSInt32 Size;
-            Core::JSON::DecSInt32 Resident;
-        };
-
-        class MallocData : public Core::JSON::Container {
-        private:
-            MallocData(const MallocData&) = delete;
-            MallocData& operator=(const MallocData&) = delete;
-
-        public:
-            MallocData()
-                : Core::JSON::Container()
-                , Size(0)
-            {
-                Add(_T("size"), &Size);
-            }
-            ~MallocData() {}
-
-        public:
-            Core::JSON::DecSInt32 Size;
-        };
-
-        class CrashData : public Core::JSON::Container {
-        private:
-            CrashData(const CrashData&) = delete;
-            CrashData& operator=(const CrashData&) = delete;
-
-        public:
-            CrashData()
-                : Core::JSON::Container()
-                , CrashCount()
-            {
-                Add(_T("crashCount"), &CrashCount);
-            }
-
-            ~CrashData() {}
-
-        public:
-            Core::JSON::DecUInt8 CrashCount;
-        };
-
-    private:
-        Data(const Data&) = delete;
-        Data& operator=(const Data&) = delete;
-
-    public:
-        Data()
-            : Core::JSON::Container()
-            , Memory()
-            , Malloc()
-            , Crash()
-        {
-            Add(_T("statm"), &Memory);
-            Add(_T("malloc"), &Malloc);
-            Add(_T("crash"), &Crash);
-        }
-
-        virtual ~Data() {}
-
-    public:
-        Statm Memory;
-        MallocData Malloc;
-        CrashData Crash;
-    };
-
-public:
     TestService()
         : _service(nullptr)
         , _notification(this)
         , _memory(nullptr)
-        , _implementation(nullptr)
+        , _testsControllerImp(nullptr)
         , _pluginName("TestService")
         , _skipURL(0)
         , _pid(0)
-        , _controller()
     {
     }
 
@@ -150,7 +58,7 @@ public:
     INTERFACE_ENTRY(PluginHost::IPlugin)
     INTERFACE_ENTRY(PluginHost::IWeb)
     INTERFACE_AGGREGATE(Exchange::IMemory, _memory)
-    INTERFACE_AGGREGATE(Exchange::ITestService, _implementation)
+    INTERFACE_AGGREGATE(Exchange::ITestController, _testsControllerImp)
     END_INTERFACE_MAP
 
     //   IPlugin methods
@@ -172,25 +80,14 @@ private:
     void Deactivated(RPC::IRemoteProcess* process);
 
     void ProcessTermination(uint32_t pid);
-    void GetStatm(Data::Statm& statm);
-
-    // Memory Test Methods
-    Core::ProxyType<Web::Response> Statm(const Web::Request& request);
-    Core::ProxyType<Web::Response> Malloc(const Web::Request& request);
-    Core::ProxyType<Web::Response> Free(const Web::Request& request);
-    // Crash Test Methods
-    Core::ProxyType<Web::Response> Crash(const Web::Request& request);
-    Core::ProxyType<Web::Response> CrashNTimes(const Web::Request& request);
 
     PluginHost::IShell* _service;
     Core::Sink<Notification> _notification;
     Exchange::IMemory* _memory;
-    Exchange::ITestService* _implementation;
-
+    Exchange::ITestController* _testsControllerImp;
     string _pluginName;
     uint8_t _skipURL;
     uint32_t _pid;
-    TestCore::TestController _controller;
 };
 
 } // namespace Plugin

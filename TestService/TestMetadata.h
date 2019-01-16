@@ -4,7 +4,7 @@
 
 namespace WPEFramework {
 namespace Plugin {
-namespace TestData {
+namespace TestMetadata {
 
 class MethodDescription : public Core::JSON::Container {
 private:
@@ -113,6 +113,6 @@ public:
     Core::JSON::ArrayType<Parameter> Input;
     Core::JSON::ArrayType<Parameter> Output;
 };
-} // namespace TestData
+} // namespace TestMetadata
 } // namespace Plugin
 } // namespace WPEFramework
