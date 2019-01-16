@@ -60,17 +60,20 @@ public:
     }
 
     // ITestController methods
-    bool Reqister(const string& name, const string& desciption, const std::map<int, std::vector<string>>& input,
-        const std::map<int, std::vector<string>>& output, Web::Request::type requestType,
-        const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest) override;
+    bool Reqister(const string& name,
+                  const string& desciption,
+                  const std::map<int, std::vector<string>>& input,
+                  const std::map<int, std::vector<string>>& output,
+                  const Web::Request::type requestType,
+                  const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest) override;
 
     bool Unregister(const string& name) override;
-    Core::ProxyType<Web::Response> Process(const Web::Request& request, uint8_t skipURL) override;
+    Core::ProxyType<Web::Response> Process(const Web::Request& request, const uint8_t skipURL) override;
 
 private:
     Core::ProxyType<Web::Response> GetMethods(void) override;
-    Core::ProxyType<Web::Response> GetMethodDescription(string methodName) override;
-    Core::ProxyType<Web::Response> GetMethodParameters(string methodName) override;
+    Core::ProxyType<Web::Response> GetMethodDescription(const string& methodName) override;
+    Core::ProxyType<Web::Response> GetMethodParameters(const string& methodName) override;
 
 private:
     std::map<Web::Request::type, std::list<TestMethod>> _tests;

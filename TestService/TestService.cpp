@@ -91,24 +91,23 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestService::Data>> jsonDataFactory
         auto free = std::bind(&TestService::Free, this, _1);
 
         // ToDo: Try to simplify this initialization of functions parameters
-        std::vector<std::string> statmIn_0({ "void", "", "no input argument required" });
+        std::vector<std::string> statmIn_0({ "", "", "no input argument required" });
         std::map<int, std::vector<string>> statmIn = { { 0, statmIn_0 } };
 
-        std::vector<std::string> mallocIn_0({ "uint32_t", "size", "allocate block of memory [Kb]" });
+        std::vector<std::string> mallocIn_0({ "Int", "size", "allocate block of memory [Kb]" });
         std::map<int, std::vector<string>> mallocIn = { { 0, mallocIn_0 } };
 
-        std::vector<std::string> freeIn_0({ "void", "", "no input argument required" });
+        std::vector<std::string> freeIn_0({ "", "", "no input argument required" });
         std::map<int, std::vector<string>> freeIn = { { 0, freeIn_0 } };
-        std::vector<std::string> freeOut_0({ "void", "", "no output argument returned" });
+        std::vector<std::string> freeOut_0({ "", "", "no output argument returned" });
         std::map<int, std::vector<string>> freeOut = { { 0, freeOut_0 } };
 
-        std::vector<std::string> memOut_0({ "uint32_t", "allocated", "current allocated memory [Kb]" });
-        std::vector<std::string> memOut_1({ "uint32_t", "size", "size value from /proc/self/statm [Kb]" });
-        std::vector<std::string> memOut_2({ "uint32_t", "resident", "resident value from /proc/self/statm [Kb]" });
+        std::vector<std::string> memOut_0({ "Int", "allocated", "current allocated memory [Kb]" });
+        std::vector<std::string> memOut_1({ "Int", "size", "size value from /proc/self/statm [Kb]" });
+        std::vector<std::string> memOut_2({ "Int", "resident", "resident value from /proc/self/statm [Kb]" });
         std::map<int, std::vector<string>> memOut = { { 0, memOut_0 }, { 1, memOut_1 }, { 2, memOut_2 } };
 
-        _controller.Reqister(
-            "Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
+        _controller.Reqister("Statm", "Get memory allocation statistics", statmIn, memOut, Web::Request::type::HTTP_GET, statm);
         _controller.Reqister("Malloc", "Allocate memory", mallocIn, memOut, Web::Request::type::HTTP_POST, malloc);
         _controller.Reqister("Free", "Free memory", freeIn, freeOut, Web::Request::type::HTTP_POST, free);
         ///////////////////// End - Test Methods Definition: Memory ///////////////////////
@@ -118,20 +117,18 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestService::Data>> jsonDataFactory
         auto crashNTimes = std::bind(&TestService::CrashNTimes, this, _1);
 
         // ToDo: Try to simplify this initialization of functions parameters
-        std::vector<std::string> crashIn_0({ "void", "", "no input argument required" });
+        std::vector<std::string> crashIn_0({ "", "", "no input argument required" });
         std::map<int, std::vector<string>> crashIn = { { 0, crashIn_0 } };
-        std::vector<std::string> crashOut_0({ "void", "", "no output argument returned" });
+        std::vector<std::string> crashOut_0({ "", "", "no output argument returned" });
         std::map<int, std::vector<string>> crashOut = { { 0, crashOut_0 } };
 
-        std::vector<std::string> crashNTimesIn_0({ "uint8_t", "crashCount", "desired consequtive crash count" });
+        std::vector<std::string> crashNTimesIn_0({ "Int", "crashCount", "desired consequtive crash count" });
         std::map<int, std::vector<string>> crashNTimesIn = { { 0, crashNTimesIn_0 } };
-        std::vector<std::string> crashNTimesOut_0({ "void", "", "no output argument returned" });
+        std::vector<std::string> crashNTimesOut_0({ "", "", "no output argument returned" });
         std::map<int, std::vector<string>> crashNTimesOut = { { 0, crashNTimesOut_0 } };
 
-        _controller.Reqister(
-            "Crash", "Causes plugin to crash", crashIn, crashOut, Web::Request::type::HTTP_POST, crash);
-        _controller.Reqister("CrashNTimes", "Causes plugin to crash N times in  row", crashNTimesIn, crashNTimesOut,
-            Web::Request::type::HTTP_POST, crashNTimes);
+        _controller.Reqister("Crash", "Causes plugin to crash", crashIn, crashOut, Web::Request::type::HTTP_POST, crash);
+        _controller.Reqister("CrashNTimes", "Causes plugin to crash N times in  row", crashNTimesIn, crashNTimesOut, Web::Request::type::HTTP_POST, crashNTimes);
         ///////////////////// End - Test Methods Definition: Crash ///////////////////////
 
         _implementation->Configure(_service);

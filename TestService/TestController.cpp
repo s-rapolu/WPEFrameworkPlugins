@@ -13,10 +13,12 @@ static Core::ProxyPoolType<Web::JSONBodyType<TestData::MethodDescription>> metho
 static Core::ProxyPoolType<Web::JSONBodyType<TestData::Parameters>> parametersFactory(2);
 
 // ITestController methods
-bool TestController::Reqister(const string& name, const string& desciption,
-    const std::map<int, std::vector<string>>& input, const std::map<int, std::vector<string>>& output,
-    Web::Request::type requestType,
-    const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest)
+bool TestController::Reqister(const string& name,
+                              const string& desciption,
+                              const std::map<int, std::vector<string>>& input,
+                              const std::map<int, std::vector<string>>& output,
+                              const Web::Request::type requestType,
+                              const std::function<Core::ProxyType<Web::Response>(const Web::Request&)>& processRequest)
 {
     bool status = false;
     TestMethod newTestMethod(name, desciption, input, output, processRequest);
@@ -44,11 +46,10 @@ bool TestController::Unregister(const string& name)
     return false;
 }
 
-Core::ProxyType<Web::Response> TestController::Process(const Web::Request& request, uint8_t skipURL)
+Core::ProxyType<Web::Response> TestController::Process(const Web::Request& request, const uint8_t skipURL)
 {
     bool exit = false;
-    Core::TextSegmentIterator index(
-        Core::TextFragment(request.Path, skipURL, request.Path.length() - skipURL), false, '/');
+    Core::TextSegmentIterator index(Core::TextFragment(request.Path, skipURL, request.Path.length() - skipURL), false, '/');
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
     result->Message = _T("Method not supported");
     result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -124,7 +125,7 @@ Core::ProxyType<Web::Response> TestController::GetMethods(void)
     return result;
 }
 
-Core::ProxyType<Web::Response> TestController::GetMethodDescription(string methodName)
+Core::ProxyType<Web::Response> TestController::GetMethodDescription(const string& methodName)
 {
     bool exit = false;
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
@@ -159,7 +160,7 @@ Core::ProxyType<Web::Response> TestController::GetMethodDescription(string metho
     return result;
 }
 
-Core::ProxyType<Web::Response> TestController::GetMethodParameters(string methodName)
+Core::ProxyType<Web::Response> TestController::GetMethodParameters(const string& methodName)
 {
     bool exit = false;
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());

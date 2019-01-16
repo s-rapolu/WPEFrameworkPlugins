@@ -14,13 +14,12 @@ static constexpr const char PendingCrashFilepath[] = "/tmp/TestService.pending";
 // ITestService methods
 uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
 {
-    _lock.Lock();
-
     TRACE(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
     uint32_t noOfBlocks = 0;
     uint32_t blockSize = (32 * (getpagesize() >> 10)); // 128kB block size
     uint32_t runs = (uint32_t)size / blockSize;
 
+    _lock.Lock();
     for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
     {
         _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
@@ -37,7 +36,6 @@ uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
     }
 
     _currentMemoryAllocation += (noOfBlocks * blockSize);
-
     _lock.Unlock();
 
     return _currentMemoryAllocation;
@@ -45,22 +43,20 @@ uint32_t TestServiceImplementation::Malloc(uint32_t size) // size in Kb
 
 void TestServiceImplementation::Statm(uint32_t& allocated, uint32_t& size, uint32_t& resident)
 {
-    _lock.Lock();
-
     TRACE(Trace::Information, (_T("*** TestServiceImplementation::Statm ***")))
 
+    _lock.Lock();
     allocated = _currentMemoryAllocation;
+    _lock.Unlock();
+
     size = static_cast<uint32_t>(_process.Allocated() >> 10);
     resident = static_cast<uint32_t>(_process.Resident() >> 10);
 
     LogMemoryUsage();
-    _lock.Unlock();
 }
 
 void TestServiceImplementation::Free(void)
 {
-    _lock.Lock();
-
     TRACE(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
 
     if (!_memory.empty())
@@ -72,10 +68,11 @@ void TestServiceImplementation::Free(void)
         _memory.clear();
     }
 
+    _lock.Lock();
     _currentMemoryAllocation = 0;
+    _lock.Unlock();
 
     LogMemoryUsage();
-    _lock.Unlock();
 }
 
 void TestServiceImplementation::DisableOOMKill()
