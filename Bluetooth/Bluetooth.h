@@ -22,6 +22,9 @@ namespace Bluetooth {
                     }
                 }
             }
+            Address(const bdaddr_t& address) : _length(sizeof(_address)) {
+                ::memcpy(&_address, &address, sizeof(_address));
+            }
             Address(const TCHAR address[]) : _length(sizeof(_address)) {
                 ::memset(&_address, 0, sizeof(_address));
                 str2ba(address, &_address);
@@ -44,7 +47,6 @@ namespace Bluetooth {
             bool Default() {
                 _length = 0;
                 int deviceId = hci_get_route(nullptr);
-                printf ("DeviceId: %d\n", deviceId);
                 if ((deviceId >= 0) && (hci_devba(deviceId, &_address) >= 0)) {
                     _length = sizeof(_address);
                 }
@@ -258,6 +260,17 @@ namespace Bluetooth {
             return (result);
         }
 
+    protected:        
+        int Handle() const {
+            return (static_cast<const Core::IResource&>(*this).Descriptor());
+        }
+        void Lock () {
+            _adminLock.Lock();
+        }
+        void Unlock () {
+            _adminLock.Unlock();
+        }
+
     private:        
         void Reevaluate() {
             _reevaluate.SetEvent();
@@ -358,7 +371,160 @@ namespace Bluetooth {
         const IOutbound* _outbound;
         Core::Event _reevaluate;
         std::atomic<uint32_t> _waitCount;
+        uint8_t _state;
     };
+
+    class HCISocket : public SynchronousSocket {
+    private:
+        HCISocket(const HCISocket&) = delete;
+        HCISocket& operator=(const HCISocket&) = delete;
+
+        static constexpr int      SCAN_TIMEOUT           = 1000;
+        static constexpr uint8_t  SCAN_TYPE              = 0x01;
+        static constexpr uint8_t  OWN_TYPE               = 0x00;
+        static constexpr uint8_t  SCAN_FILTER_POLICY     = 0x00;
+        static constexpr uint8_t  SCAN_FILTER_DUPLICATES = 0x01;
+        static constexpr uint8_t  EIR_NAME_SHORT         = 0x08;
+        static constexpr uint8_t  EIR_NAME_COMPLETE      = 0x09;
+
+    public:
+        class Filter {
+        private: 
+            Filter() = delete;
+
+        public: 
+            Filter(const uint32_t type, const uint32_t events) {
+                hci_filter_clear(&_filter);
+                hci_filter_set_ptype(type, &_filter);
+                hci_filter_set_event(events, &_filter);
+            }
+            Filter(const struct hci_filter& filter) {
+                ::memcpy(&_filter, &filter, sizeof(_filter));
+            }
+            Filter(const Filter& copy) {
+                ::memcpy(&_filter, &(copy._filter), sizeof(_filter));
+            }
+            ~Filter() {
+            }
+
+            Filter& operator=(const Filter& rhs) {
+                ::memcpy(&_filter, &(rhs._filter), sizeof(_filter));
+                return (*this);
+            }
+
+        private:
+            friend class HCISocket;
+
+            struct hci_filter& Data() {
+                return (_filter);
+            } 
+            const struct hci_filter& Data() const {
+                return (_filter);
+            } 
+
+
+        private:
+            struct hci_filter _filter;
+        };
+
+    public:
+        enum state : uint8_t {
+            SCANNING = 0x0001
+        };
+
+    public:
+        HCISocket()
+            : SynchronousSocket(Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 256)
+            , _state(0) {
+
+        }
+        virtual ~HCISocket() {
+            Close(Core::infinite);
+        }
+        bool IsScanning() const {
+            return ((_state & SCANNING) != 0);
+        }
+        void StartScan(const uint16_t interval, const uint16_t window) {
+
+            Lock();
+
+            if ((_state & SCANNING) == 0) {
+                int descriptor = Handle();
+
+                ASSERT (descriptor >= 0);
+
+                Set (Filter(HCI_EVENT_PKT, EVT_LE_META_EVENT));
+
+                if (hci_le_set_scan_parameters(descriptor, SCAN_TYPE, htobs(interval), htobs(window), OWN_TYPE, SCAN_FILTER_POLICY, SCAN_TIMEOUT) >= 0) {
+                    if (hci_le_set_scan_enable(descriptor, 1, SCAN_FILTER_DUPLICATES, SCAN_TIMEOUT) >= 0) {
+                        _state |= SCANNING;
+                    }
+                }
+            }
+
+            Unlock();
+        }
+        void StopScan() {
+
+            Lock();
+
+            if ((_state & SCANNING) != 0) {
+                int descriptor = Handle();
+
+                ASSERT (descriptor >= 0);
+ 
+                if (hci_le_set_scan_enable(descriptor, 0, SCAN_FILTER_DUPLICATES, SCAN_TIMEOUT) >= 0) {
+                    _state ^= SCANNING;
+                }
+            }
+
+            Unlock();
+        }
+        void Get (Filter& filter) const {
+            socklen_t filterLen = sizeof(struct hci_filter);
+            ::getsockopt(Handle(), SOL_HCI, HCI_FILTER, const_cast<struct hci_filter*>(&(filter.Data())), &filterLen);
+        }
+        void Set (const Filter& filter) {
+            ::setsockopt(Handle(), SOL_HCI, HCI_FILTER, &(filter.Data()), sizeof(struct hci_filter));
+        }
+
+
+        virtual void DiscoveredDevice (const Address&, const string& shortAddress, const string& longName) = 0;
+
+    private:        
+        virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t availableData) override
+        {
+            const evt_le_meta_event* eventMetaData = reinterpret_cast<const evt_le_meta_event*>(&(dataFrame[1 + HCI_EVENT_HDR_SIZE]));
+
+            if (eventMetaData->subevent == 0x02) {
+                string shortName;
+                string longName;
+                const le_advertising_info* advertisingInfo = reinterpret_cast<const le_advertising_info*>(&(eventMetaData->data[1]));
+                uint16_t offset = 0;
+                uint16_t length = advertisingInfo->length;
+                const uint8_t* buffer = advertisingInfo->data;
+
+                while (((offset + buffer[offset]) <= advertisingInfo->length) && (buffer[offset] != 0)) {
+
+                    if (buffer[offset+1] != EIR_NAME_SHORT) {
+                        shortName = string(reinterpret_cast<const char*>(&(buffer[offset])), buffer[offset]);
+                    }
+                    else if (buffer[offset+1] != EIR_NAME_COMPLETE) {
+                        longName = string(reinterpret_cast<const char*>(&(buffer[offset])), buffer[offset]);
+                    }
+                    offset += (buffer[offset] + 1);
+                }
+
+                DiscoveredDevice (Address(advertisingInfo->bdaddr), shortName, longName);
+            }
+
+            return (availableData);
+        }
+
+    private:
+        uint8_t _state;
+    };
+
 
 } // namespace Bluetooth
 

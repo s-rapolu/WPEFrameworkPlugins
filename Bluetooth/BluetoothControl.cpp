@@ -83,6 +83,7 @@ namespace Plugin {
         }
 
         if ( (_driver != nullptr) && (result.empty() == false) ) {
+            _interface.Down();
             delete _driver;
             _driver = nullptr;
         }
@@ -296,18 +297,98 @@ namespace Plugin {
     //  IBluetooth methods
     // -------------------------------------------------------------------------------------------------------
     /* virtual */ bool BluetoothControl::IsScanning() const {
+        return (_hciSocket.IsScanning());
     }
     /* virtual */ uint32_t BluetoothControl::Register(IBluetooth::INotification* notification) {
+        _adminLock.Lock();
+
+        // Make sure a sink is not registered multiple times.
+        ASSERT(std::find(_observers.begin(), _observers.end(), sink) == _observers.end());
+
+        _observers.push_back(notification);
+        notification->AddRef();
+
+        // Allright iterate over all devices, so thay get announced by the observer..
+        for ( std::list<Device*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
+            notification->Update(*index);
+        }
+
+        _adminLock.Unlock();
     }
     /* virtual */ uint32_t BluetoothControl::Unregister(IBluetooth::INotification* notification) {
+        _adminLock.Lock();
+
+        std::list<IBluetooth::INotification*>::iterator index(std::find(_observers.begin(), _observers.end(), notification));
+
+        // Make sure you do not unregister something you did not register !!!
+        ASSERT(index != _observers.end());
+
+        if (index != _observers.end()) {
+            (*index)->Release();
+            _observers.erase(index);
+        }
+
+        _adminLock.Unlock();
     }
     /* virtual */ bool BluetoothControl::Scan(const bool enable) {
+        if ((_hciSocket.IsScanning() == false) && (enable == true)) {
+
+            TRACE(Trace::Information, ("Start Bluetooth Scan"));
+
+            // Clearing previously discovered devices.
+            RemoveDevices ([] (Device* device) -> bool { if ((device->IsPaired() == false) && (device->IsConnected() == false)) device->Clear(); return(false); });
+
+            _hciSocket.StartScan(0x10, 0x10);
+
+        } 
+        else if ((_hciSocket.IsScanning() == true) && (enable == false)) {
+
+            TRACE(Trace::Information, ("Stop Bluetooth Scan"));
+
+            _hciSocket.StopScan();
+        }
+
+        return (_hciSocket.IsScanning() == enable);
     }
     /* virtual */ bool BluetoothControl::Pair(const string& ) {
     }
     /* virtual */ bool BluetoothControl::Connect(const string&) {
     }
     /* virtual */ bool BluetoothControl::Disconnect(const string&) {
+    }
+
+    void BluetoothControl::DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName) {
+
+        _adminLock.Lock();
+
+        std::list<Device*>::iterator index = _devices.begin();
+
+        while ( (index != _devices.end()) && (*(*index) != address) ) { index++; }
+
+        if (index != _devices.end()) {
+            (*index)->Update(shortName,longName);
+        }
+        else {
+            _devices.push_back(Core::Service<Device>::Create<Device>(address, shortName, longName));
+        }
+
+        _adminLock.Unlock();
+    }
+
+    void BluetoothControl::RemoveDevices(std::function<bool(Device*)> filter) {
+
+        _adminLock.Lock();
+
+        for ( std::list<Device*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
+            // call the function passed into findMatchingAddresses and see if it matches
+            if ( filter ( *index ) == true )
+            {
+                (*index)->Release();
+                index = _devices.erase(index);
+            }
+        }
+
+        _adminLock.Unlock();
     }
 }
 }

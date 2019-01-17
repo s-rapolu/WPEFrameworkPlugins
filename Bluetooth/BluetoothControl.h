@@ -14,6 +14,29 @@ namespace Plugin {
         BluetoothControl(const BluetoothControl&) = delete;
         BluetoothControl& operator=(const BluetoothControl&) = delete;
 
+        class HCISocket : public Bluetooth::HCISocket {
+        private:
+            HCISocket() = delete;
+            HCISocket(const HCISocket&) = delete;
+            HCISocket& operator= (const HCISocket&) = delete;
+
+        public:
+            HCISocket(BluetoothControl& parent) 
+                : Bluetooth::HCISocket()
+                , _parent(parent) {
+            }
+            virtual ~HCISocket() {
+            }
+
+        public:
+            virtual void DiscoveredDevice (const Bluetooth::Address& address, const string& shortName, const string& longName) {
+                _parent.DiscoveredDevice (address, shortName, longName);
+            }
+            
+        private:
+            BluetoothControl& _parent;
+        };
+
         class Config : public Core::JSON::Container {
         private:
             Config(const Config&);
@@ -92,16 +115,19 @@ namespace Plugin {
             Device () 
                 : _address()
                 , _name()
+                , _longName()
                 , _state(0) {
             }
-            Device (const Bluetooth::Address& address, const string& name) 
+            Device (const Bluetooth::Address& address, const string& shortName, const string& longName) 
                 : _address(address)
-                , _name(name)
-                , _state(0) {
+                , _name(shortName)
+                , _longName(longName)
+                , _state(DISCOVERED) {
             }
             Device (const Device& copy) 
                 : _address(copy._address)
                 , _name(copy._name) 
+                , _longName(copy._longName)
                 , _state(copy._state) {
             }
             ~Device() {
@@ -123,6 +149,20 @@ namespace Plugin {
             virtual bool IsConnected() const override {
                 return ((_state & CONNECTED) != 0);
             }
+            inline void Clear() { 
+                _state &= (~DISCOVERED);
+            }
+            inline bool operator== (const Bluetooth::Address& rhs) const {
+                return (_address == rhs);
+            }
+            inline bool operator!= (const Bluetooth::Address& rhs) const {
+                return (_address != rhs);
+            }
+            inline void Update (const string& shortName, const string& longName) {
+                _name = shortName;
+                _longName = longName;
+                _state |= DISCOVERED;
+            }
 
             BEGIN_INTERFACE_MAP(Device)
                 INTERFACE_ENTRY(IBluetooth::IDevice)
@@ -131,6 +171,7 @@ namespace Plugin {
         private:
             Bluetooth::Address _address;
             string _name;
+            string _longName;
             uint8_t _state;
         };
 
@@ -157,9 +198,10 @@ namespace Plugin {
     public:
         BluetoothControl()
             : _skipURL(0)
+            , _adminLock()
             , _service(nullptr)
             , _driver(nullptr)
-            , _hciSocket(Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 256)
+            , _hciSocket(*this)
             , _btAddress()
             , _interface()
         {
@@ -218,15 +260,18 @@ namespace Plugin {
         Core::ProxyType<Web::Response> PutMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> PostMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> DeleteMethod(Core::TextSegmentIterator& index);
+        void RemoveDevices(std::function<bool(Device*)> filter);
+        void DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName);
 
     private:
         uint8_t _skipURL;
+        Core::CriticalSection _adminLock;
         PluginHost::IShell* _service;
         Bluetooth::Driver* _driver;
-        Bluetooth::SynchronousSocket _hciSocket;
+        HCISocket _hciSocket;
         Bluetooth::Address _btAddress;
         Bluetooth::Driver::Interface _interface;
-        std::list<IBluetooth::IDevice*> _devices;
+        std::list<Device*> _devices;
         std::list<IBluetooth::INotification*> _observers;
     };
 } //namespace Plugin
