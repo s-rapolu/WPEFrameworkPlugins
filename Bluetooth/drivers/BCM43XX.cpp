@@ -1,3 +1,5 @@
+#define _TRACE_LEVEL 2
+
 #include "Module.h"
 #include "BlueDriver.h"
 
@@ -24,7 +26,7 @@ public:
     public:
         Config()
             : Core::JSON::Container()
-            , Port(_T("/dev/ttyAMA0"))
+            , Port(_T("/dev/ttyS0"))
             , Firmware(_T("/etc/firmware/"))
             , BaudRate(921600)
             , MACAddress()
@@ -279,6 +281,7 @@ private:
     uint32_t result = driver->Initialize();
 
     if (result != Core::ERROR_NONE) {
+        
         TRACE_L1 ("Failed to start the Bluetooth driver.");
         delete driver;
         driver = nullptr;

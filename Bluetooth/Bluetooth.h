@@ -9,33 +9,6 @@
 
 namespace WPEFramework {
 
-namespace Core {
-
-    class SocketBluetooth : public Core::SocketPort {
-    private:
-        SocketBluetooth() = delete;
-        SocketBluetooth(const SocketBluetooth&) = delete;
-        SocketBluetooth& operator=(const SocketBluetooth&) = delete;
-
-    public:
-    public:
-        SocketBluetooth( const Core::NodeId& localNode, const uint16_t bufferSize) :
-            SocketPort((localNode.Extension() == BTPROTO_HCI ? SocketPort::RAW : SocketPort::SEQUENCED),localNode, Core::NodeId(), bufferSize, bufferSize) {
-        }
-        virtual ~SocketBluetooth() {
-        }
-
-    public:
-        // Methods to extract and insert data into the socket buffers
-        virtual uint16_t SendData(uint8_t* dataFrame, const uint16_t maxSendSize) = 0;
-        virtual uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t receivedSize) = 0;
-
-        // Signal a state change, Opened, Closed or Accepted
-        virtual void StateChange() = 0;
-    };
-
-} // namespace Core
-
 namespace Bluetooth {
 
         class Address {
@@ -71,6 +44,7 @@ namespace Bluetooth {
             bool Default() {
                 _length = 0;
                 int deviceId = hci_get_route(nullptr);
+                printf ("DeviceId: %d\n", deviceId);
                 if ((deviceId >= 0) && (hci_devba(deviceId, &_address) >= 0)) {
                     _length = sizeof(_address);
                 }
@@ -140,6 +114,7 @@ namespace Bluetooth {
             , _maxSize(64)
             , _buffer(reinterpret_cast<uint8_t*>(::malloc(_maxSize))) {
             _mgmtHeader.index = htobs(index);
+            _mgmtHeader.opcode = 0xDEAD;
             _mgmtHeader.len = 0;
         }
         virtual ~ManagementFrame() {
@@ -237,7 +212,7 @@ namespace Bluetooth {
         uint16_t _size;
     };
 
-    class SynchronousSocket : public Core::SocketBluetooth {
+    class SynchronousSocket : public Core::SocketPort {
     private:
         SynchronousSocket() = delete;
         SynchronousSocket(const SynchronousSocket&) = delete;
@@ -245,13 +220,14 @@ namespace Bluetooth {
 
     public:
         SynchronousSocket(const Core::NodeId& localNode, const uint16_t bufferSize)
-            : Core::SocketBluetooth(localNode, bufferSize)
+            : SocketPort((localNode.Extension() == BTPROTO_HCI ? SocketPort::RAW : SocketPort::SEQUENCED), localNode, Core::NodeId(), bufferSize, bufferSize)
             , _adminLock()
             , _outbound(nullptr)
             , _reevaluate (false, true)
             , _waitCount(0) {
         }
         virtual ~SynchronousSocket() {
+            Close(Core::infinite);
         }
 
         uint32_t Send(const IOutbound& message, const uint32_t waitTime) {
@@ -383,22 +359,6 @@ namespace Bluetooth {
         Core::Event _reevaluate;
         std::atomic<uint32_t> _waitCount;
     };
-
-    class HCISocket : public SynchronousSocket {
-    private:
-        HCISocket() = delete;
-        HCISocket(const HCISocket&) = delete;
-        HCISocket& operator= (const HCISocket&) = delete;
-
-    public:
-        HCISocket(const Core::NodeId& source) 
-            : SynchronousSocket(source, 256) {
-        }
-        virtual ~HCISocket() {
-        }
-
-    public:
-   };
 
 } // namespace Bluetooth
 

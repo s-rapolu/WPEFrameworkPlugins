@@ -22,16 +22,16 @@ namespace Plugin {
         public:
             Config()
                 : Core::JSON::Container()
-                , OutOfProcess(true)
+                , Interface(0)
             {
-                Add(_T("outofprocess"), &OutOfProcess);
+                Add(_T("interface"), &Interface);
             }
             ~Config()
             {
             }
 
         public:
-            Core::JSON::Boolean OutOfProcess;
+            Core::JSON::DecUInt8 Interface;
         };
 
     public:
@@ -159,8 +159,9 @@ namespace Plugin {
             : _skipURL(0)
             , _service(nullptr)
             , _driver(nullptr)
-            , _hciSocket(Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL))
+            , _hciSocket(Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 256)
             , _btAddress()
+            , _interface()
         {
         }
         virtual ~BluetoothControl()
@@ -222,8 +223,9 @@ namespace Plugin {
         uint8_t _skipURL;
         PluginHost::IShell* _service;
         Bluetooth::Driver* _driver;
-        Bluetooth::HCISocket _hciSocket;
+        Bluetooth::SynchronousSocket _hciSocket;
         Bluetooth::Address _btAddress;
+        Bluetooth::Driver::Interface _interface;
         std::list<IBluetooth::IDevice*> _devices;
         std::list<IBluetooth::INotification*> _observers;
     };

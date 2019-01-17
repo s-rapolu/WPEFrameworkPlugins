@@ -21,49 +21,65 @@ namespace Plugin {
 
         _service = service;
         _skipURL = _service->WebPrefix().length();
+        Config config;
+        config.FromString(_service->ConfigLine());
         _driver = Bluetooth::Driver::Instance(_service->ConfigLine());
 
         // First see if we can bring up the Driver....
-        if (_driver != nullptr) {
+        if (_driver == nullptr) {
             result = _T("Could not load the Bluetooth Driver.");
         }
         else {
-            Bluetooth::ManagementFrame mgmtFrame(ADAPTER_INDEX);
-            Bluetooth::SynchronousSocket channel (Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 128);
-            struct mgmt_mode modeFlags;
-
-            modeFlags.val = htobs(ENABLE_MODE);
-
-            if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_POWERED, modeFlags), 1000) != Core::ERROR_NONE) {
-                result = "Failed to power on bluetooth adaptor";
-            }
-            // Enable Bondable on adaptor.
-            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_BONDABLE, modeFlags), 1000) != Core::ERROR_NONE) {
-                result = "Failed to enable Bondable";
-            }
-            // Enable Simple Secure Simple Pairing.
-            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SSP, modeFlags), 1000) != Core::ERROR_NONE) {
-                result = "Failed to enable Simple Secure Simple Pairing";
-            }
-            // Enable Low Energy
-            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_LE, modeFlags), 1000) != Core::ERROR_NONE) {
-                result = "Failed to enable Low Energy";
-            }
-            // Enable Secure Connections
-            else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SECURE_CONN, modeFlags), 1000) != Core::ERROR_NONE) {
-                result = "Failed to enable Secure Connections";
-            }
-            // See if we can load the default Bleutooth address
-            else if (_btAddress.Default() == false) {
-                result = "Could not get the Bluetooth address";
+            _interface = Bluetooth::Driver::Interface(config.Interface.Value());
+         
+            if (_interface.IsValid() == false) {
+                result = _T("Could not bring up the interface.");
             }
             else {
-                _hciSocket.LocalNode(_btAddress.NodeId());
+                Bluetooth::SynchronousSocket channel (Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 128);
 
-                if (_hciSocket.Open(100) != Core::ERROR_NONE) {
-                    result = "Could not open the HCI control channel";
+                if (channel.Open(Core::infinite) != Core::ERROR_NONE) {
+                    result = _T("Could not open a management Bleutooth connection.");
                 }
-            }                
+                else {
+                    Bluetooth::ManagementFrame mgmtFrame(ADAPTER_INDEX);
+                    struct mgmt_mode modeFlags;
+                    modeFlags.val = htobs(ENABLE_MODE);
+
+                    if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_POWERED, modeFlags), 1000) != Core::ERROR_NONE) {
+                        result = "Failed to power on bluetooth adaptor";
+                    }
+                    // Enable Bondable on adaptor.
+                    else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_BONDABLE, modeFlags), 1000) != Core::ERROR_NONE) {
+                        result = "Failed to enable Bondable";
+                    }
+                    // Enable Simple Secure Simple Pairing.
+                    else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SSP, modeFlags), 1000) != Core::ERROR_NONE) {
+                        result = "Failed to enable Simple Secure Simple Pairing";
+                    }
+                    // Enable Low Energy
+                    else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_LE, modeFlags), 1000) != Core::ERROR_NONE) {
+                        result = "Failed to enable Low Energy";
+                    }    
+                    // Enable Secure Connections
+                    else if (channel.Send(mgmtFrame.Set(MGMT_OP_SET_SECURE_CONN, modeFlags), 1000) != Core::ERROR_NONE) {
+                        result = "Failed to enable Secure Connections";
+                    }
+                    else if (_interface.Up() == false) {
+                        result = "Failed to bring up the Bluetooth interface";
+                    }
+                    else if (_btAddress.Default() == false) {
+                        result = "Could not get the Bluetooth address";
+                    }
+                    else {
+                        _hciSocket.LocalNode(_btAddress.NodeId());
+
+                        if (_hciSocket.Open(100) != Core::ERROR_NONE) {
+                            result = "Could not open the HCI control channel";
+                        }
+                    }
+                }                
+            }
         }
 
         if ( (_driver != nullptr) && (result.empty() == false) ) {
@@ -82,6 +98,8 @@ namespace Plugin {
         _service = nullptr;
 
         if (_driver != nullptr) {
+            // We bring the interface up, so we should bring it down as well..
+            _interface.Down();
             delete _driver;
             _driver = nullptr;
         }

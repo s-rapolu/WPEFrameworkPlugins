@@ -36,6 +36,83 @@ namespace Bluetooth {
         }
 
     public:
+        class Interface {
+
+        public:
+            Interface() : _descriptor(-1) {
+            }
+            Interface(const uint32_t id) {
+                /* Open HCI socket  */
+                if ((_descriptor = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)) >= 0) {
+                    _info.dev_id = id;
+                    if (ioctl(_descriptor, HCIGETDEVINFO, (void *) &_info) != 0) {
+                        close(_descriptor);
+                        _descriptor = -1;
+                    }
+                }
+            }
+            Interface(const Interface& copy) : _descriptor (-1) {
+                if (copy._descriptor >= 0) {
+                    _descriptor = ::dup(copy._descriptor);
+                    ::memcpy (&_info, &(copy._info), sizeof(_info));
+                }
+            }
+            ~Interface() {
+                if (_descriptor >= 0) {
+                    ::close(_descriptor);
+                    _descriptor = -1;
+                }
+            }
+                
+            Interface& operator= (const Interface& rhs) {
+                if (_descriptor >= 0) {
+                    ::close(_descriptor);
+                    _descriptor = -1;
+                }
+                if (rhs._descriptor >= 0) {
+                    _descriptor = ::dup(rhs._descriptor);
+                    ::memcpy (&_info, &(rhs._info), sizeof(_info));
+                }
+
+                return (*this);
+            }
+
+        public:
+            bool IsValid() const {
+                return (_descriptor >= 0);
+            }
+            bool Up() {
+                bool result = false;
+
+                if (_descriptor >= 0) {
+                    if (::ioctl(_descriptor, HCIDEVUP, _info.dev_id) < 0) {
+                        result = (errno == EALREADY);
+                    }
+                    else {
+                        result = true;
+                    }
+                }
+ 
+                return (result);
+            }
+            bool Down() {
+                bool result = true;
+
+                if (_descriptor >= 0) {
+                    if (::ioctl(_descriptor, HCIDEVDOWN, _info.dev_id) < 0) {
+                        result = false;
+                    }
+                }
+ 
+                return (result);
+            }
+
+        private:
+            struct hci_dev_info _info;
+            int _descriptor;
+        };
+
+    public:
         virtual ~Driver()
         {
         }
