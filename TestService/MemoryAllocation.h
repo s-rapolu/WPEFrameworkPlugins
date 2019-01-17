@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Module.h"
-
+#include "ITestSuite.h"
 #include "TestController.h"
 
 #include <functional>
@@ -9,19 +9,91 @@ using namespace std::placeholders;
 
 namespace WPEFramework {
 
-class MemoryAllocation : public WPEFramework::TestCore::ITestSuite {
+class MemoryAllocation : public TestCore::ITestSuite {
 private:
+    class MemoryMetadata : public Core::JSON::Container
+    {
+        public:
+            class StatmMetadata : public Core::JSON::Container
+            {
+                private:
+                    StatmMetadata(const StatmMetadata&) = delete;
+                    StatmMetadata& operator=(const StatmMetadata&) = delete;
+
+                public:
+                    StatmMetadata()
+                        : Core::JSON::Container()
+                        , Allocated(0)
+                        , Size(0)
+                        , Resident(0)
+                    {
+                        Add(_T("allocated"), &Allocated);
+                        Add(_T("size"), &Size);
+                        Add(_T("resident"), &Resident);
+                    }
+                    ~StatmMetadata()
+                    {
+                    }
+
+                public:
+                    Core::JSON::DecSInt32 Allocated;
+                    Core::JSON::DecSInt32 Size;
+                    Core::JSON::DecSInt32 Resident;
+            };
+
+            class MallocMetadata : public Core::JSON::Container
+            {
+                private:
+                    MallocMetadata(const MallocMetadata&) = delete;
+                    MallocMetadata& operator=(const MallocMetadata&) = delete;
+
+                public:
+                    MallocMetadata()
+                        : Core::JSON::Container()
+                        , Size(0)
+                    {
+                        Add(_T("size"), &Size);
+                    }
+                    ~MallocMetadata()
+                    {
+                    }
+
+                public:
+                    Core::JSON::DecSInt32 Size;
+            };
+
+        private:
+            MemoryMetadata(const MemoryMetadata&) = delete;
+            MemoryMetadata& operator=(const MemoryMetadata&) = delete;
+
+        public:
+            MemoryMetadata()
+                : Core::JSON::Container()
+                , Statm()
+                , Malloc()
+            {
+                Add(_T("statm"), &Statm);
+                Add(_T("malloc"), &Malloc);
+            }
+
+            virtual ~MemoryMetadata()
+            {
+            }
+
+        public:
+            StatmMetadata Statm;
+            MallocMetadata Malloc;
+    };
+
     class TestCase
     {
         private:
         TestCase& operator=(const TestCase&) = delete;
 
         public:
-        TestCase(string name, string desciption, const std::map<int, std::vector<string>> &input, const std::map<int, std::vector<string>> &output, const std::function<string(void)> &testCase)
+        TestCase(string name, string desciption, const std::function<string(void)> &testCase)
                 : _name(name)
                 , _description(desciption)
-                , _input(input)
-                , _output(output)
                 , _exec(testCase)
             {
             }
@@ -31,8 +103,6 @@ private:
         public:
             string _name;
             string _description;
-            std::map<int, std::vector<string>> _input; //ToDo: Replace by class type
-            std::map<int, std::vector<string>> _output; //ToDo: Replace by class type
             std::function<string(void)> _exec;
     };
 
@@ -64,30 +134,23 @@ public:
         : _currentMemoryAllocation(0)
         , _lock()
         , _process()
+        , _body()
     {
         DisableOOMKill();
         _startSize = static_cast<uint32_t>(_process.Allocated() >> 10);
         _startResident = static_cast<uint32_t>(_process.Resident() >> 10);
 
-        auto statm = std::bind(&MemoryAllocation::Statm, this);
-        auto malloc = std::bind(&MemoryAllocation::Malloc, this);
-        auto free = std::bind(&MemoryAllocation::Free, this);
-        auto testCases = std::bind(&MemoryAllocation::GetTestCases, this);
+        Reqister("Statm", "Get memory allocation statistics", std::bind(&MemoryAllocation::Statm, this));
+        Reqister("Malloc", "Allocate memory", std::bind(&MemoryAllocation::Malloc, this));
+        Reqister("Free", "Free memory", std::bind(&MemoryAllocation::Free, this));
+        Reqister("TestCases", "", std::bind(&MemoryAllocation::GetTestCases, this));//ToDo: Consider to change this registration
 
-        auto testCaseDescription = std::bind(&MemoryAllocation::GetTestCaseDescription, this, _1);
-        auto testCaseParameters = std::bind(&MemoryAllocation::GetTestCaseParameters, this, _1);
-
-        Reqister("Statm", "Get memory allocation statistics", {}, {}, statm);
-        Reqister("Malloc", "Allocate memory", {}, {}, malloc);
-        Reqister("Free", "Free memory", {}, {}, free);
-        Reqister("TestCases", "", {}, {}, testCases);//ToDo: Change this implementation
-
-        ReqisterHelpers("Statm/Description", testCaseDescription);
-        ReqisterHelpers("Statm/Parameters", testCaseParameters);
-        ReqisterHelpers("Free/Description", testCaseDescription);
-        ReqisterHelpers("Free/Parameters", testCaseParameters);
-        ReqisterHelpers("Malloc/Description", testCaseDescription);
-        ReqisterHelpers("Malloc/Parameters", testCaseParameters);
+        ReqisterHelpers("Statm/Description", std::bind(&MemoryAllocation::GetTestCaseDescription, this, _1));
+        ReqisterHelpers("Statm/Parameters", std::bind(&MemoryAllocation::GetTestCaseParameters, this, _1));
+        ReqisterHelpers("Free/Description", std::bind(&MemoryAllocation::GetTestCaseDescription, this, _1));
+        ReqisterHelpers("Free/Parameters", std::bind(&MemoryAllocation::GetTestCaseParameters, this, _1));
+        ReqisterHelpers("Malloc/Description", std::bind(&MemoryAllocation::GetTestCaseDescription, this, _1));
+        ReqisterHelpers("Malloc/Parameters", std::bind(&MemoryAllocation::GetTestCaseParameters, this, _1));
 
         TestCore::TestController::Instance().AnnounceTestSuite(*this, "Memory");
     }
@@ -110,9 +173,10 @@ private:
     string /*JSON*/ Statm(void);
     string /*JSON*/ Free(void);
 
-    void Reqister(const string &name, const string &desciption, const std::map<int, std::vector<string>> &input, const std::map<int, std::vector<string>> &output, const std::function<string(void)> &testCaseCallback);
+    void Reqister(const string &name, const string &desciption, const std::function<string(void)> &testCaseCallback);
     void ReqisterHelpers(const string &name, const std::function<string(string)> &testCaseInfoCallback);
-    string /*JSON*/ GetBody(void);
+    string /*JSON*/ GetBody(const string& testCase);
+
     void DisableOOMKill(void);
     void LogMemoryUsage(void);
 
@@ -127,6 +191,8 @@ private:
     Core::ProcessInfo _process;
     std::list<void*> _memory;
     uint32_t _currentMemoryAllocation; // size in Kb
+
+    string _body;
     std::list<TestCase> _testCases;
     std::list<TestCaseInfo> _testCasesInfo;
 };

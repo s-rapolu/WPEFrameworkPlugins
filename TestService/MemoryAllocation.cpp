@@ -6,6 +6,8 @@ namespace WPEFramework {
 void MemoryAllocation::Setup(const string& body)
 {
     SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Setup ***")))
+    //Store body locally
+    _body = body;
 }
 
 string /*JSON*/ MemoryAllocation::Execute(const string& testCase)
@@ -60,6 +62,11 @@ string /*JSON*/ MemoryAllocation::GetTestCaseDescription(const string& testCase)
 string /*JSON*/ MemoryAllocation::GetTestCaseParameters(const string& testCase)
 {
     SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::GetTestCaseParameters %s ***"), testCase.c_str()))
+    return "";
+}
+
+string /*JSON*/ MemoryAllocation::GetBody(const string& testCase)
+{
     return "";
 }
 
@@ -160,9 +167,9 @@ void MemoryAllocation::LogMemoryUsage(void)
 }
 
 // ITest methods
-void MemoryAllocation::Reqister(const string &name, const string &desciption, const std::map<int, std::vector<string>> &input, const std::map<int, std::vector<string>> &output, const std::function<string(void)> &testCaseCallback)
+void MemoryAllocation::Reqister(const string &name, const string &desciption, const std::function<string(void)> &testCaseCallback)
 {
-    TestCase newTestCase(name, desciption, input, output, testCaseCallback);
+    TestCase newTestCase(name, desciption, testCaseCallback);
    _testCases.push_back(newTestCase);
 }
 

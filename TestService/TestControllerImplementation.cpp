@@ -23,7 +23,7 @@ namespace WPEFramework
             {
 
                 SYSLOG(Trace::Fatal, (_T("*** TestControllerImplementation::Process ***")))
-                bool execute = false;
+                bool executed = false;
                 // Return empty result in case of issue
                 string result = EMPTY_STRING;
 
@@ -54,19 +54,18 @@ namespace WPEFramework
                         {
                             //Found test suite
                             index.Next();
-                            //Get remaining paths, this is full method name
+                            //Get remaining paths, this will be treat as full method name
                             if (index.Remainder().Length() != 0)
                             {
-                                string testSuiteMethod = index.Remainder().Text();
-                                testAreas.Current()->Execute(testSuiteMethod);
-                                execute = true;
+                                testAreas.Current()->Execute(index.Remainder().Text());
+                                executed = true;
                             }
                             break;
                         }
                     }
                 }
 
-                if (!execute)
+                if (!executed)
                 {
                     SYSLOG(Trace::Fatal, (_T("*** Test case method not found ***")))
                 }

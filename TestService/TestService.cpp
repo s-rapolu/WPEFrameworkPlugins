@@ -61,7 +61,6 @@ SERVICE_REGISTRATION(TestService, 1, 0);
 /* virtual */ const string TestService::Initialize(PluginHost::IShell* service)
 {
     /*Assume that everything is OK*/
-    SYSLOG(Trace::Fatal, (_T("*** TestService::Deinitialize 1 ***")))
     string message = EMPTY_STRING;
     Config config;
 
@@ -74,16 +73,13 @@ SERVICE_REGISTRATION(TestService, 1, 0);
     _skipURL = static_cast<uint8_t>(_service->WebPrefix().length());
     _service->Register(&_notification);
 
-    _testsControllerImp = Core::ServiceAdministrator::Instance().Instantiate<Exchange::ITestController>(Core::Library(), _T("TestControllerImplementation"), static_cast<uint32_t>(~0));
-    //_testsControllerImp = _service->Root<Exchange::ITestController>(_pid, ImplWaitTime, _T("TestControllerImplementation"));
-    SYSLOG(Trace::Fatal, (_T("*** TestService::Deinitialize 2***")))
+    _testsControllerImp = _service->Root<Exchange::ITestController>(_pid, ImplWaitTime, _T("TestControllerImplementation"));
 
     if ((_testsControllerImp != nullptr) && (_service != nullptr))
     {
         _memory = WPEFramework::TestService::MemoryObserver(_pid);
         ASSERT(_memory != nullptr);
         _memory->Observe(_pid);
-        SYSLOG(Trace::Fatal, (_T("*** TestService::Deinitialize 3***")))
     }
     else
     {
@@ -94,7 +90,6 @@ SERVICE_REGISTRATION(TestService, 1, 0);
 
         TRACE(Trace::Fatal, (_T("*** TestService could not be instantiated ***")))
         message = _T("TestService could not be instantiated.");
-        SYSLOG(Trace::Fatal, (_T("*** TestService::Deinitialize 4***")))
     }
 
     return message;
@@ -107,7 +102,6 @@ SERVICE_REGISTRATION(TestService, 1, 0);
     ASSERT(_memory != nullptr);
     ASSERT(_pid);
 
-    SYSLOG(Trace::Fatal, (_T("*** TestService::Deinitialize ***")))
     TRACE(Trace::Information, (_T("*** OutOfProcess Plugin is properly destructed. PID: %d ***"), _pid))
 
     ProcessTermination(_pid);
@@ -138,7 +132,6 @@ SERVICE_REGISTRATION(TestService, 1, 0);
     ASSERT(_skipURL <= request.Path.length());
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
 
-    SYSLOG(Trace::Fatal, (_T("*** TestService::Process path: %s ***"), request.Path.c_str()))
     responseBody = _testsControllerImp->Process(request.Path, _skipURL, "");
     //ToDo: Convert responseBody to valid format
 
