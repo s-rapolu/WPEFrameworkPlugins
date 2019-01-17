@@ -21,74 +21,56 @@ namespace WPEFramework
             // ITestController methods
             string /*JSON*/ Process(const string& path, const uint8_t skipUrl, const string& body /*JSON*/)
             {
-                bool exit = false;
-                string result = "";
+
+                SYSLOG(Trace::Fatal, (_T("*** TestControllerImplementation::Process ***")))
+                bool execute = false;
+                // Return empty result in case of issue
+                string result = EMPTY_STRING;
+
                 Core::TextSegmentIterator index(Core::TextFragment(path, skipUrl, path.length() - skipUrl), false, '/');
 
                 index.Next();
                 index.Next();
 
-                if (index.Current().Text() != _T("Methods"))
+                if (index.Current().Text() == _T("TestSuites"))
                 {
-                    TestCore::TestController::Iterator testAreas(_testController.Producers());
-
+                    TestCore::TestController::Iterator testAreas(_testController.TestSuites());
                     while (testAreas.Next() == true)
                     {
-                        const std::list<string> methodsPerGroup = (*testAreas)->GetMethods();
-                        for (auto const& method : methodsPerGroup)
-                        {
-                            if (method == index.Current().Text())
-                            {
-                                //ToDo: Handling of Configure is missing
-                                result = (*testAreas)->Execute(index.Current().Text());
-                                exit = true;
-                                break;
-                            }
-                        }
-                        if (exit)
-                            break;
+                        //ToDo: Build response in TestController, for now list registered TestSuites
+                        string group = testAreas.Key();
+                        SYSLOG(Trace::Fatal, (_T("*** Test Groups: %s ***"), group.c_str()))
                     }
                 }
-                else // Handle default /Methods/... request separately
+                else
                 {
-                    if (!index.Next())
-                    {
-                        //ToDo: How to return supported Methods
-                    }
-                    else
-                    {
-                        string methodName = index.Current().Text();
-                        index.Next();
-                        string callType = index.Current().Text();
+                    string testSuite = index.Current().Text();
+                    SYSLOG(Trace::Fatal, (_T("*** TestSuite %s ***"), testSuite.c_str()))
 
-                        TestCore::TestController::Iterator testAreas(_testController.Producers());
-
-                        while (testAreas.Next() == true)
+                    TestCore::TestController::Iterator testAreas(_testController.TestSuites());
+                    while (testAreas.Next() == true)
+                    {
+                        if (testAreas.Key() == testSuite)
                         {
-                            const std::list<string> methodsPerGroup = (*testAreas)->GetMethods();
-                            for (auto const& method : methodsPerGroup)
+                            //Found test suite
+                            index.Next();
+                            //Get remaining paths, this is full method name
+                            if (index.Remainder().Length() != 0)
                             {
-                                if (method == index.Current().Text())
-                                {
-                                    if(callType == _T("Description"))
-                                    {
-                                        result = (*testAreas)->GetMethodDes(index.Current().Text());
-                                        exit = true;
-                                        break;
-                                    }
-                                    else if (callType == _T("Parameters"))
-                                    {
-                                        result = (*testAreas)->GetMethodParam(index.Current().Text());
-                                        exit = true;
-                                        break;
-                                    }
-                                }
+                                string testSuiteMethod = index.Remainder().Text();
+                                testAreas.Current()->Execute(testSuiteMethod);
+                                execute = true;
                             }
-                            if (exit)
-                                break;
+                            break;
                         }
                     }
                 }
+
+                if (!execute)
+                {
+                    SYSLOG(Trace::Fatal, (_T("*** Test case method not found ***")))
+                }
+
                 return result;
             }
 

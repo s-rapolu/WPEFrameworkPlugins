@@ -27,8 +27,6 @@ option(WPEFRAMEWORK_PLUGIN_WEBSERVER "Include WebServer plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_WEBSHELL "Include WebShell plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_TVCONTROL "Include TVControl plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_WIFICONTROL "Include WifiControl plugin" OFF)
-option(WPEFRAMEWORK_PLUGIN_CRASHDUMMY "Include CrashDummy plugin" OFF)
-option(WPEFRAMEWORK_PLUGIN_MALLOCDUMMY "Include MallocDummy plugin" OFF)
 option(WPEFRAMEWORK_PLUGIN_TESTSERVICE "Include TestService plugin" ON)
 
 # This contains all kinds of plugins (publicely available, so they all need the plugin support library !!
@@ -154,14 +152,6 @@ endif()
 
 if(WPEFRAMEWORK_PLUGIN_RTSPCLIENT)
     add_subdirectory(RtspClient)
-endif()
-
-if(WPEFRAMEWORK_PLUGIN_CRASHDUMMY)
-    add_subdirectory(CrashDummy)
-endif()
-
-if(WPEFRAMEWORK_PLUGIN_MALLOCDUMMY)
-    add_subdirectory(MallocDummy)
 endif()
 
 if(WPEFRAMEWORK_PLUGIN_TESTSERVICE)

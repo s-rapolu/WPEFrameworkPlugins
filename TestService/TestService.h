@@ -3,7 +3,6 @@
 #include "Module.h"
 #include <interfaces/IMemory.h>
 #include <interfaces/ITestController.h>
-#include "TestController.h"
 
 namespace WPEFramework {
 namespace Plugin {

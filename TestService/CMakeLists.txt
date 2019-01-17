@@ -12,7 +12,8 @@ set(PLUGIN_SOURCES
         TestService.cpp
         TestController.cpp
         TestControllerImplementation.cpp
-        MemoryAllocation.cpp)
+        MemoryAllocation.cpp
+)
 
 # Library definition section
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
