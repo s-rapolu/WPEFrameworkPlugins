@@ -5,107 +5,165 @@ namespace WPEFramework {
 // ITest methods
 void MemoryAllocation::Setup(const string& body)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Setup ***")))
     //Store body locally
     _body = body;
 }
 
 string /*JSON*/ MemoryAllocation::Execute(const string& testCase)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::ExecuteTest ***")))
-    string result = "";
-    bool extecuted = false;
+    string response/*JSON*/ = EMPTY_STRING;
+
+    response = ExecuteTestCase(testCase);
+
+    if (response == EMPTY_STRING)
+    {
+        response = ExecuteTestCaseInfo(testCase);
+    }
+    return response;
+}
+
+string /*JSON*/ MemoryAllocation::ExecuteTestCase(const string& testCase)
+{
+    string response/*JSON*/ = EMPTY_STRING;
 
     for (auto const& test : _testCases)
     {
         if (test._name == testCase)
         {
-            result = test._exec();
-            extecuted = true;
+            response = test._exec();
             break;
         }
     }
+    return response;
+}
 
-    if (extecuted == false) //Check helper request list
+string /*JSON*/ MemoryAllocation::ExecuteTestCaseInfo(const string& testCase)
+{
+    string response/*JSON*/ = EMPTY_STRING;
+
+    for (auto const& testInfo : _testCasesInfo)
     {
-        for (auto const& testInfo : _testCasesInfo)
+        if (testInfo._name == testCase)
         {
-            if (testInfo._name == testCase)
-            {
-                result = testInfo._exec(testCase);
-                extecuted = true;
-                break;
-            }
+            Core::TextSegmentIterator index(Core::TextFragment(testCase), false, '/');
+            index.Next();
+            response = testInfo._exec(testInfo._type, index.Current().Text());
+            break;
         }
     }
-
-    return result;
+    return response;
 }
 
 void MemoryAllocation::Cleanup(void)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Cleanup ***")))
+    Free();
 }
 
-string /*JSON*/ MemoryAllocation::GetTestCases(void)
+string /*JSON*/ MemoryAllocation::GetBody()
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::GetTestCases ***")))
-    return "";
+    return _body;
 }
 
-string /*JSON*/ MemoryAllocation::GetTestCaseDescription(const string& testCase)
+string /*JSON*/ MemoryAllocation::CreateResponse(const MemoryAllocation::ResponseType type, const string& method)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::GetTestCaseDescription %s ***"), testCase.c_str()))
-    return "";
-}
+    string response = EMPTY_STRING;
 
-string /*JSON*/ MemoryAllocation::GetTestCaseParameters(const string& testCase)
-{
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::GetTestCaseParameters %s ***"), testCase.c_str()))
-    return "";
-}
+    if (type == MemoryAllocation::ResponseType::TEST_CASE_RESULT)
+    {
+        MemoryOutputMetadata exeResponse;
+        uint32_t allocated, size, resident;
 
-string /*JSON*/ MemoryAllocation::GetBody(const string& testCase)
-{
-    return "";
+        _lock.Lock();
+        allocated = _currentMemoryAllocation;
+        size = static_cast<uint32_t>(_process.Allocated() >> 10);
+        resident = static_cast<uint32_t>(_process.Resident() >> 10);
+        _lock.Unlock();
+
+        exeResponse.Allocated = allocated;
+        exeResponse.Resident = resident;
+        exeResponse.Size = size;
+        exeResponse.ToString(response);
+    }
+    else if (type == MemoryAllocation::ResponseType::TEST_CASES_LIST)
+    {
+        TestCore::TestCases testCasesListResponse;
+        for (auto& testCase : _testCases)
+        {
+            Core::JSON::String name;
+            name = testCase._name;
+            testCasesListResponse.TestCaseNames.Add(name);
+        }
+        testCasesListResponse.ToString(response);
+    }
+    else if (type == MemoryAllocation::ResponseType::TEST_CASE_DESCRIPTION)
+    {
+        TestCore::TestCaseDescription testCaseDesResponse;
+        for (auto& testCase : _testCases)
+        {
+            if(testCase._name == _T(method))
+            {
+                string description;
+                description = testCase._description;
+                testCaseDesResponse.Description = description;
+                testCaseDesResponse.ToString(response);
+                break;
+            }
+        }
+    }
+    else if (type == MemoryAllocation::ResponseType::TEST_CASE_PARAMETERS)
+    {
+    }
+
+    return response;
 }
 
 // Memory Allocation methods
-string MemoryAllocation::Malloc(void) // size in Kb
+string /*JSON*/ MemoryAllocation::Malloc(void) // size in Kb
 {
-    uint32_t size = 100;//ToDo: Get size from Body using string /*JSON*/ GetBody(void);
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Malloc ***")))
-    TRACE(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
+    uint32_t size;
+    //Get body metadata
+    string body = GetBody();
+    MallocInputMetadata input;
 
-    uint32_t noOfBlocks = 0;
-    uint32_t blockSize = (32 * (getpagesize() >> 10)); // 128kB block size
-    uint32_t runs = (uint32_t)size / blockSize;
-
-    _lock.Lock();
-    for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
+    if (input.FromString(body))
     {
-        _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
-        if (!_memory.back())
+        size = input.Size;
+        TRACE(Trace::Information, (_T("*** Allocate %lu Kb ***"), size))
+
+        uint32_t noOfBlocks = 0;
+        uint32_t blockSize = (32 * (getpagesize() >> 10)); // 128kB block size
+        uint32_t runs = (uint32_t)size / blockSize;
+
+        _lock.Lock();
+
+        for (noOfBlocks = 0; noOfBlocks < runs; ++noOfBlocks)
         {
-            TRACE(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
-            break;
+            _memory.push_back(malloc(static_cast<size_t>(blockSize << 10)));
+            if (!_memory.back())
+            {
+                TRACE(Trace::Fatal, (_T("*** Failed allocation !!! ***")))
+                break;
+            }
+
+            for (uint32_t index = 0; index < (blockSize << 10); index++)
+            {
+                static_cast<unsigned char*>(_memory.back())[index] = static_cast<unsigned char>(rand() & 0xFF);
+            }
         }
 
-        for (uint32_t index = 0; index < (blockSize << 10); index++)
-        {
-            static_cast<unsigned char*>(_memory.back())[index] = static_cast<unsigned char>(rand() & 0xFF);
-        }
+        _currentMemoryAllocation += (noOfBlocks * blockSize);
+        _lock.Unlock();
+    }
+    else
+    {
+        TRACE(Trace::Fatal, (_T("*** Invalid POST Body, Memory is not allocated !!! ***")))
     }
 
-    _currentMemoryAllocation += (noOfBlocks * blockSize);
-    _lock.Unlock();
-
-    return "";//ToDo: Create full JSON response in string format
+    return CreateResponse(MemoryAllocation::ResponseType::TEST_CASE_RESULT, "");
 }
 
-string MemoryAllocation::Statm(void)
+string /*JSON*/ MemoryAllocation::Statm(void)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Statm ***")))
     TRACE(Trace::Information, (_T("*** TestServiceImplementation::Statm ***")))
 
     uint32_t allocated;
@@ -119,13 +177,11 @@ string MemoryAllocation::Statm(void)
     size = static_cast<uint32_t>(_process.Allocated() >> 10);
     resident = static_cast<uint32_t>(_process.Resident() >> 10);
 
-    LogMemoryUsage();
-    return "";//ToDo: Create full JSON response in string format
+    return CreateResponse(MemoryAllocation::ResponseType::TEST_CASE_RESULT, "");
 }
 
-string MemoryAllocation::Free(void)
+string /*JSON*/ MemoryAllocation::Free(void)
 {
-    SYSLOG(Trace::Fatal, (_T("*** Call MemoryAllocation::Free ***")))
     TRACE(Trace::Information, (_T("*** TestServiceImplementation::Free ***")))
 
     if (!_memory.empty())
@@ -141,8 +197,7 @@ string MemoryAllocation::Free(void)
     _currentMemoryAllocation = 0;
     _lock.Unlock();
 
-    LogMemoryUsage();
-    return "";//ToDo: Create full JSON response in string format
+    return CreateResponse(MemoryAllocation::ResponseType::TEST_CASE_RESULT, "");
 }
 
 void MemoryAllocation::DisableOOMKill()
@@ -158,12 +213,6 @@ void MemoryAllocation::LogMemoryUsage(void)
     TRACE(Trace::Information, (_T("*** Initial Resident: %lu Kb ***"), _startResident))
     TRACE(Trace::Information, (_T("*** Size:     %lu Kb ***"), static_cast<uint32_t>(_process.Allocated() >> 10)))
     TRACE(Trace::Information, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
-
-    SYSLOG(Trace::Fatal, (_T("*** Current allocated: %lu Kb ***"), _currentMemoryAllocation))
-    SYSLOG(Trace::Fatal, (_T("*** Initial Size:     %lu Kb ***"), _startSize))
-    SYSLOG(Trace::Fatal, (_T("*** Initial Resident: %lu Kb ***"), _startResident))
-    SYSLOG(Trace::Fatal, (_T("*** Size:     %lu Kb ***"), static_cast<uint32_t>(_process.Allocated() >> 10)))
-    SYSLOG(Trace::Fatal, (_T("*** Resident: %lu Kb ***"), static_cast<uint32_t>(_process.Resident() >> 10)))
 }
 
 // ITest methods
@@ -173,9 +222,9 @@ void MemoryAllocation::Reqister(const string &name, const string &desciption, co
    _testCases.push_back(newTestCase);
 }
 
-void MemoryAllocation::ReqisterHelpers(const string &name, const std::function<string(string)> &testCaseInfoCallback)
+void MemoryAllocation::ReqisterHelpers(const string &name, MemoryAllocation::ResponseType type, const std::function<string(MemoryAllocation::ResponseType, string)> &testCaseInfoCallback)
 {
-    TestCaseInfo newTestCaseInfo(name, testCaseInfoCallback);
+    TestCaseInfo newTestCaseInfo(name, type, testCaseInfoCallback);
     _testCasesInfo.push_back(newTestCaseInfo);
 }
 } // namespace WPEFramework

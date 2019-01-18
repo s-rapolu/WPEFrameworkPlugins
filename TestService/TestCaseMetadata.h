@@ -3,44 +3,43 @@
 #include "Module.h"
 
 namespace WPEFramework {
-namespace Plugin {
-namespace TestMetadata {
+namespace TestCore {
 
-class MethodDescription : public Core::JSON::Container {
+class TestCaseDescription : public Core::JSON::Container {
 private:
-    MethodDescription(const MethodDescription&) = delete;
-    MethodDescription& operator=(const MethodDescription&) = delete;
+    TestCaseDescription(const TestCaseDescription&) = delete;
+    TestCaseDescription& operator=(const TestCaseDescription&) = delete;
 
 public:
-    MethodDescription()
+    TestCaseDescription()
         : Core::JSON::Container()
         , Description()
     {
         Add(_T("description"), &Description);
     }
 
-    ~MethodDescription() {}
+    ~TestCaseDescription() {}
 
 public:
     Core::JSON::String Description;
 };
 
-class Methods : public Core::JSON::Container {
+class TestCases : public Core::JSON::Container {
 private:
-    Methods(const Methods&) = delete;
-    Methods& operator=(const Methods&) = delete;
+    TestCases(const TestCases&) = delete;
+    TestCases& operator=(const TestCases&) = delete;
 
 public:
-    Methods()
+    TestCases()
         : Core::JSON::Container()
-        , MethodNames()
+        , TestCaseNames()
     {
-        Add(_T("methodNames"), &MethodNames);
+        Add(_T("testCases"), &TestCaseNames);
     }
-    ~Methods() {}
+    ~TestCases() {}
 
 public:
-    Core::JSON::ArrayType<Core::JSON::String> MethodNames;
+    Core::JSON::ArrayType<Core::JSON::String> TestCaseNames;
 };
 
 class Parameters : public Core::JSON::Container {
@@ -113,6 +112,5 @@ public:
     Core::JSON::ArrayType<Parameter> Input;
     Core::JSON::ArrayType<Parameter> Output;
 };
-} // namespace TestMetadata
-} // namespace Plugin
+} //namespace TestCore
 } // namespace WPEFramework

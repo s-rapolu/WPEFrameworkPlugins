@@ -14,6 +14,8 @@ namespace WPEFramework
         public:
             TestControllerImplementation()
                 : _testController(TestCore::TestController::Instance())
+                , _previousTestSuiteName(EMPTY_STRING)
+                , _previousTestSuite(nullptr)
             {}
 
             virtual ~TestControllerImplementation() {}
@@ -21,44 +23,48 @@ namespace WPEFramework
             // ITestController methods
             string /*JSON*/ Process(const string& path, const uint8_t skipUrl, const string& body /*JSON*/)
             {
-
-                SYSLOG(Trace::Fatal, (_T("*** TestControllerImplementation::Process ***")))
                 bool executed = false;
                 // Return empty result in case of issue
-                string result = EMPTY_STRING;
+                string /*JSON*/ response = EMPTY_STRING;
 
                 Core::TextSegmentIterator index(Core::TextFragment(path, skipUrl, path.length() - skipUrl), false, '/');
 
                 index.Next();
                 index.Next();
 
+                TestCore::TestController::Iterator testAreas(_testController.TestSuites());
+
                 if (index.Current().Text() == _T("TestSuites"))
                 {
-                    TestCore::TestController::Iterator testAreas(_testController.TestSuites());
-                    while (testAreas.Next() == true)
-                    {
-                        //ToDo: Build response in TestController, for now list registered TestSuites
-                        string group = testAreas.Key();
-                        SYSLOG(Trace::Fatal, (_T("*** Test Groups: %s ***"), group.c_str()))
-                    }
+                    response = _testController.GetTestSuites();
+                    executed = true;
                 }
                 else
                 {
-                    string testSuite = index.Current().Text();
-                    SYSLOG(Trace::Fatal, (_T("*** TestSuite %s ***"), testSuite.c_str()))
+                    string currentTestSuite = index.Current().Text();
 
-                    TestCore::TestController::Iterator testAreas(_testController.TestSuites());
                     while (testAreas.Next() == true)
                     {
-                        if (testAreas.Key() == testSuite)
+                        if (testAreas.Key() == currentTestSuite)
                         {
                             //Found test suite
+                            if ((currentTestSuite != _previousTestSuiteName) && (_previousTestSuiteName != EMPTY_STRING))
+                            {
+                                //Cleanup before run any kind of test from different Test Suite
+                                _previousTestSuite->Cleanup();
+                            }
+
                             index.Next();
                             //Get remaining paths, this will be treat as full method name
                             if (index.Remainder().Length() != 0)
                             {
-                                testAreas.Current()->Execute(index.Remainder().Text());
+                                //Setup each test before execution, it is up to Test Suite to handle Setup method
+                                testAreas.Current()->Setup(body);
+                                //Execute
+                                response = testAreas.Current()->Execute(index.Remainder().Text());
                                 executed = true;
+                                _previousTestSuiteName = currentTestSuite;
+                                _previousTestSuite = testAreas.Current();
                             }
                             break;
                         }
@@ -67,10 +73,10 @@ namespace WPEFramework
 
                 if (!executed)
                 {
-                    SYSLOG(Trace::Fatal, (_T("*** Test case method not found ***")))
+                    TRACE(Trace::Fatal, (_T("*** Test case method not found !!! ***")))
                 }
 
-                return result;
+                return response;
             }
 
             BEGIN_INTERFACE_MAP(TestControllerImplementation)
@@ -79,6 +85,8 @@ namespace WPEFramework
 
         private:
             TestCore::TestController& _testController;
+            string _previousTestSuiteName;
+            TestCore::ITestSuite* _previousTestSuite;
     };
 
 SERVICE_REGISTRATION(TestControllerImplementation, 1, 0);

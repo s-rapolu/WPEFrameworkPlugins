@@ -115,30 +115,53 @@ SERVICE_REGISTRATION(TestService, 1, 0);
 /* virtual */ string TestService::Information() const
 {
     // No additional info to report.
-    return ((_T("The purpose of [%s] plugin is proivde ability to execute ffunctional tests."), _pluginName.c_str()));
+    return ((_T("The purpose of [%s] plugin is proivde ability to execute functional tests."), _pluginName.c_str()));
 }
+
+static Core::ProxyPoolType<Web::TextBody> _testServiceMetadata(2);
 
 /* virtual */ void TestService::Inbound(Web::Request& request)
 {
     if (request.Verb == Web::Request::HTTP_POST)
     {
-        //ToDo: Handle body if it is needed
+        request.Body(_testServiceMetadata.Element());
     }
 }
 
 /* virtual */ Core::ProxyType<Web::Response> TestService::Process(const Web::Request& request)
 {
-    string responseBody;
     ASSERT(_skipURL <= request.Path.length());
     Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
 
-    responseBody = _testsControllerImp->Process(request.Path, _skipURL, "");
-    //ToDo: Convert responseBody to valid format
+    if (_testsControllerImp != nullptr)
+    {
+        Core::ProxyType<Web::TextBody> body(_testServiceMetadata.Element());
+        string requestBody = EMPTY_STRING;
 
-    result->ErrorCode = Web::STATUS_OK;
-    result->Message = (_T("Handle Methods Description request"));
-    result->ContentType = Web::MIMETypes::MIME_JSON;
+        if ((request.Verb == Web::Request::HTTP_POST) && (request.HasBody()))
+        {
+            requestBody = (*request.Body<Web::TextBody>());
+        }
 
+        (*body) = _testsControllerImp->Process(request.Path, _skipURL, requestBody);
+        if((*body) != EMPTY_STRING)
+        {
+            result->Body<Web::TextBody>(body);
+            result->ErrorCode = Web::STATUS_OK;
+            result->Message = (_T("OK"));
+            result->ContentType = Web::MIMETypes::MIME_JSON;
+        }
+        else
+        {
+            result->ErrorCode = Web::STATUS_BAD_REQUEST;
+            result->Message = (_T("Method is not supported"));
+        }
+    }
+    else
+    {
+        result->ErrorCode = Web::STATUS_METHOD_NOT_ALLOWED;
+        result->Message = (_T("Test controller does not exist"));
+    }
     return result;
 }
 
