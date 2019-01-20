@@ -24,6 +24,7 @@ namespace Plugin {
         Config config;
         config.FromString(_service->ConfigLine());
         _driver = Bluetooth::Driver::Instance(_service->ConfigLine());
+        _hidPath = config.HIDPath.Value();
 
         // First see if we can bring up the Driver....
         if (_driver == nullptr) {
@@ -36,7 +37,7 @@ namespace Plugin {
                 result = _T("Could not bring up the interface.");
             }
             else {
-                Bluetooth::SynchronousSocket channel (Core::NodeId(HCI_DEV_NONE, HCI_CHANNEL_CONTROL), 128);
+                HCISocket channel (*this);
 
                 if (channel.Open(Core::infinite) != Core::ERROR_NONE) {
                     result = _T("Could not open a management Bleutooth connection.");
@@ -149,7 +150,7 @@ namespace Plugin {
             result = PostMethod(index, request);
         } else if (request.Verb == Web::Request::HTTP_DELETE) {
 
-            result = DeleteMethod(index);
+            result = DeleteMethod(index, request);
         }
 
         return result;
@@ -164,7 +165,7 @@ namespace Plugin {
         if (index.IsValid() == true) {
             if (index.Next() && index.IsValid()) {
                 TRACE(Trace::Information, (string(__FUNCTION__)));
-                if (index.Remainder() == _T("DiscoveredDevices")) {
+                if (index.Current() == _T("Discovered")) {
 
                     TRACE(Trace::Information, (string(__FUNCTION__)));
                     Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
@@ -180,7 +181,7 @@ namespace Plugin {
                         result->ErrorCode = Web::STATUS_NO_CONTENT;
                         result->Message = _T("Unable to display Discovered devices.");
                     }
-                } else if (index.Remainder() == _T("PairedDevices")) {
+                } else if (index.Current() == _T("Paired")) {
 
                     TRACE(Trace::Information, (string(__FUNCTION__)));
                     Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
@@ -225,7 +226,7 @@ namespace Plugin {
             if (index.Next()) {
                 TRACE(Trace::Information, (string(__FUNCTION__)));
 
-                if (index.Remainder() == _T("Scan")) {
+                if (index.Current() == _T("Scan")) {
                     if (Scan(true) == Core::ERROR_NONE) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Scan started.");
@@ -233,15 +234,7 @@ namespace Plugin {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
                         result->Message = _T("Unable to start Scan.");
                     }
-                } else if (index.Remainder() == _T("StopScan")) {
-                    if (Scan(false) == Core::ERROR_NONE) {
-                        result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Scan stopped.");
-                    } else {
-                        result->ErrorCode = Web::STATUS_BAD_REQUEST;
-                        result->Message = _T("Unable to stop Scan.");
-                    }
-                } else if ((index.Remainder() == _T("Pair")) && (request.HasBody())) {
+                } else if ((index.Current() == _T("Pair")) && (request.HasBody())) {
                     Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
                     if (Pair(deviceInfo->Address)) {
                         result->ErrorCode = Web::STATUS_OK;
@@ -250,24 +243,9 @@ namespace Plugin {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
                         result->Message = _T("Unable to Pair device.");
                     }
-                } else if ((index.Remainder() == _T("Connect")) && (request.HasBody())) {
-                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
-                    if (Connect(deviceInfo->Address)) {
-                        result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Connected device.");
-                    } else {
-                        result->ErrorCode = Web::STATUS_BAD_REQUEST;
-                        result->Message = _T("Unable to Connect device.");
-                    }
-                } else if ((index.Remainder() == _T("Disconnect")) && (request.HasBody())) {
-                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
-                    if (Disconnect(deviceInfo->Address)) {
-                        result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Disconnected device.");
-                    } else {
-                        result->ErrorCode = Web::STATUS_BAD_REQUEST;
-                        result->Message = _T("Unable to Disconnect device.");
-                    }
+                } else {
+                    result->ErrorCode = Web::STATUS_BAD_REQUEST;
+                    result->Message = _T("Unable to Disconnect device.");
                 }
             }
         }
@@ -284,11 +262,40 @@ namespace Plugin {
         return result;
     }
 
-    Core::ProxyType<Web::Response> BluetoothControl::DeleteMethod(Core::TextSegmentIterator& index)
+    Core::ProxyType<Web::Response> BluetoothControl::DeleteMethod(Core::TextSegmentIterator& index, const Web::Request& request)
     {
         Core::ProxyType<Web::Response> result(PluginHost::Factories::Instance().Response());
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
         result->Message = _T("Unsupported DELETE request.");
+
+        if (index.IsValid() == true) {
+            if (index.Next()) {
+                TRACE(Trace::Information, (string(__FUNCTION__)));
+
+                if (index.Current() == _T("Scan")) {
+                    if (Scan(false) == Core::ERROR_NONE) {
+                        result->ErrorCode = Web::STATUS_OK;
+                        result->Message = _T("Scan stopped.");
+                    } else {
+                        result->ErrorCode = Web::STATUS_BAD_REQUEST;
+                        result->Message = _T("Unable to start Scan.");
+                    }
+                } else if ((index.Current() == _T("Pair")) && (request.HasBody())) {
+                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
+                    if (Pair(deviceInfo->Address)) {
+                        result->ErrorCode = Web::STATUS_OK;
+                        result->Message = _T("Paired device.");
+                    } else {
+                        result->ErrorCode = Web::STATUS_BAD_REQUEST;
+                        result->Message = _T("Unable to Pair device.");
+                    }
+                } else {
+                    result->ErrorCode = Web::STATUS_BAD_REQUEST;
+                    result->Message = _T("Unable to Disconnect device.");
+                }
+            }
+        }
+
 
         return result;
     }
@@ -350,11 +357,17 @@ namespace Plugin {
 
         return (_hciSocket.IsScanning() == enable);
     }
-    /* virtual */ bool BluetoothControl::Pair(const string& ) {
-    }
-    /* virtual */ bool BluetoothControl::Connect(const string&) {
-    }
-    /* virtual */ bool BluetoothControl::Disconnect(const string&) {
+    /* virtual */ bool BluetoothControl::Pair(const string& destination) {
+
+        Bluetooth::Address remoteAddress(destination.c_str());
+
+        if (remoteAddress.IsValid() == true) {
+            Bluetooth::L2Socket* channel = new HIDSocket(_hidPath, _btAddress, remoteAddress);
+
+            if ( (channel != nullptr) && (channel->Open(1000) == Core::ERROR_NONE) ) {
+                channel->Security(BT_SECURITY_MEDIUM, 0);
+            }
+        }
     }
 
     void BluetoothControl::DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName) {

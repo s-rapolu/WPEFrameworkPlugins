@@ -5,6 +5,7 @@
 #include "Bluetooth.h"
 
 #include <interfaces/IBluetooth.h>
+#include <linux/uhid.h>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -37,6 +38,176 @@ namespace Plugin {
             BluetoothControl& _parent;
         };
 
+        class HIDSocket : public Bluetooth::L2Socket {
+        private:
+            HIDSocket() = delete;
+            HIDSocket(const HCISocket&) = delete;
+            HIDSocket& operator= (const HIDSocket&) = delete;
+
+            static constexpr uint8_t ATT_OP_FIND_BY_TYPE_REQ  = 0x06;
+            static constexpr uint8_t ATT_OP_FIND_BY_TYPE_RESP = 0x07;
+
+            // UUID
+            static constexpr uint16_t PRIMARY_SERVICE_UUID    = 0x2800;
+            static constexpr uint16_t HID_UUID                = 0x1812;
+            static constexpr uint16_t PNP_UUID                = 0x2a50;
+            static constexpr uint16_t REPORT_UUID             = 0x2a4d;
+ 
+            class InputDevice {
+            private:
+                InputDevice(const InputDevice&) = delete;
+                InputDevice& operator= (const InputDevice&) = delete;
+
+            public:
+                InputDevice () : _descriptor (-1) {
+                }
+                ~InputDevice() {
+                    Close();
+                }
+
+            public:
+                bool IsOpen() const {
+                    return (_descriptor != -1);
+                }
+                bool Send (const uint8_t length, const uint8_t data[]) {
+                    struct uhid_event uhidEvent;
+                    memset(&uhidEvent, 0, sizeof(uhidEvent));
+                    uhidEvent.type = UHID_INPUT;
+                    uhidEvent.u.input.size = length;
+                    uhidEvent.u.input.data[0] = 0x01;
+                    uint16_t count = 0;
+                    uint16_t index = 0;
+                    while (index < length) {
+                        // This is an inherited construction. I do not trust it as I would expect that the
+                        // uhidEvent.u.input.size should be updated as well. Till we tested it we leave it
+                        // like this.
+                        if (data[index] != 0x00) {
+                            uhidEvent.u.input.data[count++] = data[index];
+                        }
+                        index++;
+                   }
+
+                   return (::write(_descriptor, &uhidEvent, sizeof(uhidEvent)) >= 0);
+               } 
+               uint32_t Open(const string& path, const Bluetooth::Address& source, const Bluetooth::Address& destination, const Metadata& info) {
+                   uint32_t result = Core::ERROR_ALREADY_CONNECTED;
+
+                   if (_descriptor == -1) {
+                       result = Core::ERROR_OPENING_FAILED;
+                       _descriptor = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
+
+                       if (_descriptor >= 0) {
+                           struct uhid_event uhidEvent;
+                           result = Core::ERROR_NONE;
+
+                           // Creating UHID Node.
+                           memset(&uhidEvent, 0, sizeof(uhidEvent));
+                           uhidEvent.type = UHID_CREATE;
+                           uhidEvent.u.create.bus = BUS_BLUETOOTH;
+                           uhidEvent.u.create.vendor = info.VendorId();
+                           uhidEvent.u.create.product = info.ProductId();
+                           uhidEvent.u.create.version = info.Version();
+                           uhidEvent.u.create.country = info.Country();
+                           strncpy(reinterpret_cast<char*>(uhidEvent.u.create.name), info.Name().c_str(), sizeof(uhidEvent.u.create.name));
+                           uhidEvent.u.create.rd_data = const_cast<uint8_t*>(info.Blob());
+                           uhidEvent.u.create.rd_size = info.Length();
+                           strncpy(reinterpret_cast<char*>(uhidEvent.u.create.phys), source.ToString().c_str(), sizeof(uhidEvent.u.create.phys));
+                           strncpy(reinterpret_cast<char*>(uhidEvent.u.create.uniq), destination.ToString().c_str(), sizeof(uhidEvent.u.create.uniq));
+                            
+                           if (::write(_descriptor, &uhidEvent, sizeof(uhidEvent)) < 0) {
+                               ::close(_descriptor);
+                               _descriptor = -1;
+                               result = Core::ERROR_WRITE_ERROR;
+                           }
+                       }
+                   }
+                   return (result);
+                }
+                uint32_t Close() {
+                    if (_descriptor != -1) {
+                        ::close(_descriptor);
+                        _descriptor = -1;
+                    }
+                    return (Core::ERROR_NONE);
+                }
+
+            private:
+                int _descriptor;
+            };
+
+        public:
+            HIDSocket(const string& HIDPath, const Bluetooth::Address& localNode, const Bluetooth::Address& remoteNode) 
+                : Bluetooth::L2Socket(
+                      localNode.NodeId(Bluetooth::L2Socket::LE_ATT_CID, BDADDR_LE_PUBLIC),
+                      remoteNode.NodeId(Bluetooth::L2Socket::LE_ATT_CID, BDADDR_LE_PUBLIC),
+                      0x0001, 0xFFFF, 256)
+                , _hidPath(HIDPath)
+                , _localNode(localNode)
+                , _remoteNode(remoteNode)
+                , _device()
+                , _inputHandler(nullptr) {
+                const uint16_t message[] = { 0x0001, 0xFFFF, PRIMARY_SERVICE_UUID, HID_UUID }; 
+                CreateFrame(ATT_OP_FIND_BY_TYPE_REQ, (sizeof(message)/sizeof(uint16_t)), message);
+            }
+            virtual ~HIDSocket() {
+            }
+            
+        private:
+            void EnableInputNotification()
+            {
+                const uint16_t message[] = { 0x0001, 0xFFFF, REPORT_UUID }; 
+                CreateFrame(ATT_OP_READ_BY_TYPE_REQ, (sizeof(message)/sizeof(uint16_t)), message);
+            }
+            virtual void Received(const uint8_t dataFrame[], const uint16_t availableData) {
+                if (availableData == 0) {
+                    if (_hidPath.empty() == false) {
+                        _device.Open(_hidPath, _localNode, _remoteNode, Info());
+                        if (_device.IsOpen() == true) {
+                            EnableInputNotification();
+                        }
+                    }
+                    else {
+                        _inputHandler = PluginHost::InputHandler::KeyHandler();
+                        if (_inputHandler  != nullptr) {
+                            EnableInputNotification();
+                        }
+                    }
+                }
+                else if (dataFrame[0] == ATT_OP_HANDLE_NOTIFY) {
+                    // We got a key press.. where to ?
+                    if (_device.IsOpen() == true) {
+                        _device.Send(availableData - 2, &(dataFrame[2]));
+                    }
+                }
+                else if (dataFrame[0] == ATT_OP_READ_BY_TYPE_RESP) {
+                    // We have the notification responses.
+                    _index = 0;
+                    _reportHandles[0] = dataFrame[6] + 1;
+                    _reportHandles[1] = dataFrame[10] + 1;
+                    const uint16_t message[] = { static_cast<uint16_t>(dataFrame[2] + 1), 1 };
+                    CreateFrame(ATT_OP_WRITE_REQ, (sizeof(message)/sizeof(uint16_t)), message);
+                }
+                else if (dataFrame[0] == ATT_OP_WRITE_RESP) {
+                    if (_index < 2) {
+                        const uint16_t message[] = { _reportHandles[_index++], 1 };
+                        CreateFrame(ATT_OP_WRITE_REQ, (sizeof(message) / sizeof(uint16_t)), message );
+                    }
+                    else {
+                        TRACE(Trace::Information, (_T("We have reached an observing mode!!!")));
+                    }
+                }
+            }
+
+        private:
+            const string _hidPath;
+            Bluetooth::Address _localNode;
+            Bluetooth::Address _remoteNode;
+            InputDevice _device; 
+            PluginHost::VirtualInput* _inputHandler;
+            uint8_t _index;
+            uint16_t _reportHandles[2];
+        };
+
         class Config : public Core::JSON::Container {
         private:
             Config(const Config&);
@@ -46,8 +217,10 @@ namespace Plugin {
             Config()
                 : Core::JSON::Container()
                 , Interface(0)
+                , HIDPath()
             {
                 Add(_T("interface"), &Interface);
+                Add(_T("hidpath"), &HIDPath);
             }
             ~Config()
             {
@@ -55,6 +228,7 @@ namespace Plugin {
 
         public:
             Core::JSON::DecUInt8 Interface;
+            Core::JSON::String HIDPath;
         };
 
     public:
@@ -252,19 +426,18 @@ namespace Plugin {
 
         virtual bool Scan(const bool enable) override;
         virtual bool Pair(const string&) override;
-        virtual bool Connect(const string&) override;
-        virtual bool Disconnect(const string&) override;
 
     private:
         Core::ProxyType<Web::Response> GetMethod(Core::TextSegmentIterator& index);
         Core::ProxyType<Web::Response> PutMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> PostMethod(Core::TextSegmentIterator& index, const Web::Request& request);
-        Core::ProxyType<Web::Response> DeleteMethod(Core::TextSegmentIterator& index);
+        Core::ProxyType<Web::Response> DeleteMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         void RemoveDevices(std::function<bool(Device*)> filter);
         void DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName);
 
     private:
         uint8_t _skipURL;
+        string _hidPath;
         Core::CriticalSection _adminLock;
         PluginHost::IShell* _service;
         Bluetooth::Driver* _driver;
