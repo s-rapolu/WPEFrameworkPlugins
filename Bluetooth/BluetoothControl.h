@@ -232,14 +232,13 @@ namespace Plugin {
         };
 
     public:
-        class EXTERNAL Device : public IBluetooth::IDevice {
+        class EXTERNAL DeviceImpl : public IBluetooth::IDevice {
         private: 
-            Device& operator=(const Device&) = delete;
+            DeviceImpl& operator=(const DeviceImpl&) = delete;
 
             enum state : uint8_t {
                 DISCOVERED = 0x01,
-                PAIRED     = 0x02,
-                CONNECTED  = 0x04
+                CONNECTED  = 0x02
             };
 
         public:
@@ -270,7 +269,7 @@ namespace Plugin {
                 }
 
             public:
-                JSON& operator= (const IBluetooth::IDevice* source) {
+                JSON& Set (const DeviceImpl* source) {
                     if (source != nullptr) {
                         Address = source->Address();
                         Name = source->Name();
@@ -285,29 +284,91 @@ namespace Plugin {
                 Core::JSON::String Name;
             };
 
+            class IteratorImpl : public IBluetooth::IDevice::IIterator {
+            private:
+                IteratorImpl() = delete;
+                IteratorImpl(const IteratorImpl&) = delete;
+                IteratorImpl& operator= (const IteratorImpl&) = delete;
+
+            public:
+                IteratorImpl(const std::list<DeviceImpl*>& container) {
+                    std::list<DeviceImpl*>::const_iterator index = container.begin();
+                    while (index != container.end()) {
+                        IBluetooth::IDevice* element = (*index);
+                        element->AddRef();
+                        _list.push_back(element);
+                        index++;
+                    }
+                }
+                virtual ~IteratorImpl() {
+                    while (_list.size() != 0) {
+                        _list.front()->Release();
+                        _list.pop_front();
+                    }
+                }
+ 
+            public: 
+                virtual void Reset() override {
+                    _index = 0;
+                }
+                virtual bool IsValid() const override {
+                    return ((_index != 0) && (_index <= _list.size()));
+                }
+                virtual bool Next() override {
+                    if (_index == 0) {
+                        _index = 1;
+                        _iterator = _list.begin();
+                    }
+                    else if (_index <= _list.size()) {
+                        _index++;
+                        _iterator++;
+                    }
+                    return (IsValid());
+                }
+                virtual IBluetooth::IDevice* Current() {
+                    ASSERT (IsValid() == true);
+                    IBluetooth::IDevice* result = nullptr;
+                    result = (*_iterator);
+                    ASSERT (result != nullptr);
+                    result->AddRef();
+                    return (result);
+                }
+
+                BEGIN_INTERFACE_MAP(IteratorImpl)
+                    INTERFACE_ENTRY(IBluetooth::IDevice::IIterator)
+                END_INTERFACE_MAP
+
+            private:
+                uint32_t _index;
+                std::list<IBluetooth::IDevice*> _list;
+                std::list<IBluetooth::IDevice*>::iterator _iterator;
+            };
+
         public:
-            Device () 
+            DeviceImpl() 
                 : _address()
                 , _name()
                 , _longName()
                 , _state(0) {
             }
-            Device (const Bluetooth::Address& address, const string& shortName, const string& longName) 
+            DeviceImpl(const Bluetooth::Address& address, const string& shortName, const string& longName) 
                 : _address(address)
                 , _name(shortName)
                 , _longName(longName)
                 , _state(DISCOVERED) {
             }
-            Device (const Device& copy) 
+            DeviceImpl(const DeviceImpl& copy) 
                 : _address(copy._address)
                 , _name(copy._name) 
                 , _longName(copy._longName)
                 , _state(copy._state) {
             }
-            ~Device() {
+            ~DeviceImpl() {
             }
 
         public:
+            virtual uint32_t Pair(const string& source) override;
+            virtual uint32_t Unpair() override;
             virtual string Address() const override {
                 return (_address.ToString());
             }
@@ -318,7 +379,7 @@ namespace Plugin {
                 return ((_state & DISCOVERED) != 0);
             }
             virtual bool IsPaired() const override {
-                return ((_state & PAIRED) != 0);
+                return (_channel != nullptr);
             }
             virtual bool IsConnected() const override {
                 return ((_state & CONNECTED) != 0);
@@ -338,7 +399,7 @@ namespace Plugin {
                 _state |= DISCOVERED;
             }
 
-            BEGIN_INTERFACE_MAP(Device)
+            BEGIN_INTERFACE_MAP(DeviceImpl)
                 INTERFACE_ENTRY(IBluetooth::IDevice)
             END_INTERFACE_MAP
 
@@ -347,6 +408,7 @@ namespace Plugin {
             string _name;
             string _longName;
             uint8_t _state;
+            Bluetooth::L2Socket* _channel;
         };
 
         class EXTERNAL Status : public Core::JSON::Container {
@@ -357,16 +419,16 @@ namespace Plugin {
         public:
             Status()
                 : Scanning()
-                , DeviceList() {
+                , Devices() {
                 Add(_T("scanning"), &Scanning);
-                Add(_T("deviceList"), &DeviceList);
+                Add(_T("devices"), &Devices);
             }
             virtual ~Status() {
             }
 
         public:
             Core::JSON::Boolean Scanning;
-            Core::JSON::ArrayType<Device::JSON> DeviceList;
+            Core::JSON::ArrayType<DeviceImpl::JSON> Devices;
         };
 
     public:
@@ -425,27 +487,29 @@ namespace Plugin {
         virtual uint32_t Unregister(IBluetooth::INotification* notification) override;
 
         virtual bool Scan(const bool enable) override;
-        virtual bool Pair(const string&) override;
+        virtual IBluetooth::IDevice* Device (const string&) override;
+        virtual IBluetooth::IDevice::IIterator* Devices () override;
 
     private:
         Core::ProxyType<Web::Response> GetMethod(Core::TextSegmentIterator& index);
         Core::ProxyType<Web::Response> PutMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> PostMethod(Core::TextSegmentIterator& index, const Web::Request& request);
         Core::ProxyType<Web::Response> DeleteMethod(Core::TextSegmentIterator& index, const Web::Request& request);
-        void RemoveDevices(std::function<bool(Device*)> filter);
+        void RemoveDevices(std::function<bool(DeviceImpl*)> filter);
         void DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName);
+        DeviceImpl* Find(const string&);
 
     private:
         uint8_t _skipURL;
-        string _hidPath;
         Core::CriticalSection _adminLock;
         PluginHost::IShell* _service;
         Bluetooth::Driver* _driver;
         HCISocket _hciSocket;
         Bluetooth::Address _btAddress;
         Bluetooth::Driver::Interface _interface;
-        std::list<Device*> _devices;
+        std::list<DeviceImpl*> _devices;
         std::list<IBluetooth::INotification*> _observers;
+        static string _HIDPath;
     };
 } //namespace Plugin
 

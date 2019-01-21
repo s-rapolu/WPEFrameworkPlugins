@@ -9,8 +9,30 @@ namespace Plugin {
 
     SERVICE_REGISTRATION(BluetoothControl, 1, 0);
 
-    static Core::ProxyPoolType<Web::JSONBodyType<BluetoothControl::Device::JSON> > jsonResponseFactoryDevice(1);
+    static Core::ProxyPoolType<Web::JSONBodyType<BluetoothControl::DeviceImpl::JSON> > jsonResponseFactoryDevice(1);
     static Core::ProxyPoolType<Web::JSONBodyType<BluetoothControl::Status> > jsonResponseFactoryStatus(1);
+    /* static */ string BluetoothControl::_HIDPath;
+
+    /* virtual */ uint32_t BluetoothControl::DeviceImpl::Pair(const string& source) {
+        if (_channel == nullptr) {
+            Bluetooth::Address from(source.c_str());
+            _channel = new HIDSocket(_HIDPath, from, _address);
+
+            if ( (_channel != nullptr) && (_channel->Open(1000) == Core::ERROR_NONE) ) {
+                _channel->Security(BT_SECURITY_MEDIUM, 0);
+            }
+        }
+        return (Core::ERROR_NONE);
+    }
+
+    /* virtual */ uint32_t BluetoothControl::DeviceImpl::Unpair() {
+        if (_channel != nullptr) {
+            _channel->Close(Core::infinite);
+            delete _channel;
+            _channel = nullptr;
+        }
+        return (Core::ERROR_NONE);
+    }
 
     /* virtual */ const string BluetoothControl::Initialize(PluginHost::IShell* service)
     {
@@ -24,7 +46,7 @@ namespace Plugin {
         Config config;
         config.FromString(_service->ConfigLine());
         _driver = Bluetooth::Driver::Instance(_service->ConfigLine());
-        _hidPath = config.HIDPath.Value();
+        _HIDPath = config.HIDPath.Value();
 
         // First see if we can bring up the Driver....
         if (_driver == nullptr) {
@@ -162,56 +184,40 @@ namespace Plugin {
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
         result->Message = _T("Unsupported GET request.");
 
-        if (index.IsValid() == true) {
-            if (index.Next() && index.IsValid()) {
-                TRACE(Trace::Information, (string(__FUNCTION__)));
-                if (index.Current() == _T("Discovered")) {
-
-                    TRACE(Trace::Information, (string(__FUNCTION__)));
-                    Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
-
-                    std::string discoveredDevices;
-                    if (discoveredDevices.size() > 0) {
-                        response->DeviceList.FromString(discoveredDevices);
-
-                        result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Discovered devices.");
-                        result->Body(response);
-                    } else {
-                        result->ErrorCode = Web::STATUS_NO_CONTENT;
-                        result->Message = _T("Unable to display Discovered devices.");
-                    }
-                } else if (index.Current() == _T("Paired")) {
-
-                    TRACE(Trace::Information, (string(__FUNCTION__)));
-                    Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
-
-                    std::string pairedDevices;
-                    if (pairedDevices.size() > 0) {
-                        response->DeviceList.FromString(pairedDevices);
-
-                        result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Paired devices.");
-                        result->Body(response);
-                    } else {
-                        result->ErrorCode = Web::STATUS_NO_CONTENT;
-                        result->Message = _T("Unable to display Paired devices.");
-                    }
-                }
-            }
-        } else {
+        if (index.IsValid() == false) {
             Core::ProxyType<Web::JSONBodyType<Status> > response(jsonResponseFactoryStatus.Element());
 
             result->ErrorCode = Web::STATUS_OK;
             result->Message = _T("Current status.");
 
             response->Scanning = IsScanning();
-            std::string connectedDevices;
-            if (connectedDevices.size() > 0)
-                response->DeviceList.FromString(connectedDevices);
+            std::list<DeviceImpl*>::const_iterator index = _devices.begin();
+
+            while (index != _devices.end()) { 
+                response->Devices.Add().Set(*index);
+                index++; 
+            }
 
             result->Body(response);
         }
+        else {
+            if (index.Next() && index.IsValid()) {
+                TRACE(Trace::Information, (string(__FUNCTION__)));
+                DeviceImpl* device = Find(index.Current().Text());
+ 
+                if (device != nullptr) {
+                    Core::ProxyType<Web::JSONBodyType<DeviceImpl::JSON> > response(jsonResponseFactoryDevice.Element());
+                    response->Set(device);
+
+                    result->ErrorCode = Web::STATUS_OK;
+                    result->Message = _T("device info.");
+                    result->Body(response);
+                } else {
+                    result->ErrorCode = Web::STATUS_NO_CONTENT;
+                    result->Message = _T("Unable to display Paired devices.");
+                }
+            }
+        } 
 
         return result;
     }
@@ -234,9 +240,20 @@ namespace Plugin {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
                         result->Message = _T("Unable to start Scan.");
                     }
-                } else if ((index.Current() == _T("Pair")) && (request.HasBody())) {
-                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
-                    if (Pair(deviceInfo->Address)) {
+                } else if (index.Current() == _T("Pair")) {
+                    string destination;
+                    if (index.Next() == true) {
+                        destination = index.Current().Text();
+                    }
+                    else if (request.HasBody() == true) {
+                        destination = request.Body<const DeviceImpl::JSON>()->Address;
+                    }
+                    DeviceImpl* device = Find(destination);
+                    if (device == nullptr) {
+                        result->ErrorCode = Web::STATUS_NOT_FOUND;
+                        result->Message = _T("Paired device.");
+                    }
+                    else if (device->Pair(_btAddress.ToString())) {
                         result->ErrorCode = Web::STATUS_OK;
                         result->Message = _T("Paired device.");
                     } else {
@@ -280,11 +297,22 @@ namespace Plugin {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
                         result->Message = _T("Unable to start Scan.");
                     }
-                } else if ((index.Current() == _T("Pair")) && (request.HasBody())) {
-                    Core::ProxyType<const Device::JSON> deviceInfo (request.Body<const Device::JSON>());
-                    if (Pair(deviceInfo->Address)) {
+                } else if (index.Current() == _T("Pair")) {
+                    string address;
+                    if (index.Next() == true) {
+                        address = index.Current().Text();
+                    }
+                    else if (request.HasBody() == true) {
+                        address = request.Body<const DeviceImpl::JSON>()->Address;
+                    }
+                    DeviceImpl* device = Find(address);
+                    if (device == nullptr) {
+                        result->ErrorCode = Web::STATUS_NOT_FOUND;
+                        result->Message = _T("Unpaired device.");
+                    }
+                    else if (device->Unpair()) {
                         result->ErrorCode = Web::STATUS_OK;
-                        result->Message = _T("Paired device.");
+                        result->Message = _T("Unpaired device.");
                     } else {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
                         result->Message = _T("Unable to Pair device.");
@@ -316,7 +344,7 @@ namespace Plugin {
         notification->AddRef();
 
         // Allright iterate over all devices, so thay get announced by the observer..
-        for ( std::list<Device*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
+        for ( std::list<DeviceImpl*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
             notification->Update(*index);
         }
 
@@ -343,7 +371,7 @@ namespace Plugin {
             TRACE(Trace::Information, ("Start Bluetooth Scan"));
 
             // Clearing previously discovered devices.
-            RemoveDevices ([] (Device* device) -> bool { if ((device->IsPaired() == false) && (device->IsConnected() == false)) device->Clear(); return(false); });
+            RemoveDevices ([] (DeviceImpl* device) -> bool { if ((device->IsPaired() == false) && (device->IsConnected() == false)) device->Clear(); return(false); });
 
             _hciSocket.StartScan(0x10, 0x10);
 
@@ -357,24 +385,24 @@ namespace Plugin {
 
         return (_hciSocket.IsScanning() == enable);
     }
-    /* virtual */ bool BluetoothControl::Pair(const string& destination) {
 
-        Bluetooth::Address remoteAddress(destination.c_str());
-
-        if (remoteAddress.IsValid() == true) {
-            Bluetooth::L2Socket* channel = new HIDSocket(_hidPath, _btAddress, remoteAddress);
-
-            if ( (channel != nullptr) && (channel->Open(1000) == Core::ERROR_NONE) ) {
-                channel->Security(BT_SECURITY_MEDIUM, 0);
-            }
+    /* virtual */ Exchange::IBluetooth::IDevice* BluetoothControl::Device (const string& address) {
+        IBluetooth::IDevice* result = Find(address);
+        if (result != nullptr) {
+            result->AddRef();
         }
+        return (result);
+    }
+
+    /* virtual */ Exchange::IBluetooth::IDevice::IIterator* BluetoothControl::Devices () {
+        return (Core::Service<DeviceImpl::IteratorImpl>::Create<IBluetooth::IDevice::IIterator>(_devices));
     }
 
     void BluetoothControl::DiscoveredDevice(const Bluetooth::Address& address, const string& shortName, const string& longName) {
 
         _adminLock.Lock();
 
-        std::list<Device*>::iterator index = _devices.begin();
+        std::list<DeviceImpl*>::iterator index = _devices.begin();
 
         while ( (index != _devices.end()) && (*(*index) != address) ) { index++; }
 
@@ -382,17 +410,17 @@ namespace Plugin {
             (*index)->Update(shortName,longName);
         }
         else {
-            _devices.push_back(Core::Service<Device>::Create<Device>(address, shortName, longName));
+            _devices.push_back(Core::Service<DeviceImpl>::Create<DeviceImpl>(address, shortName, longName));
         }
 
         _adminLock.Unlock();
     }
 
-    void BluetoothControl::RemoveDevices(std::function<bool(Device*)> filter) {
+    void BluetoothControl::RemoveDevices(std::function<bool(DeviceImpl*)> filter) {
 
         _adminLock.Lock();
 
-        for ( std::list<Device*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
+        for ( std::list<DeviceImpl*>::iterator index = _devices.begin(), end = _devices.end(); index != end; ++index ) {
             // call the function passed into findMatchingAddresses and see if it matches
             if ( filter ( *index ) == true )
             {
@@ -402,6 +430,14 @@ namespace Plugin {
         }
 
         _adminLock.Unlock();
+    }
+    BluetoothControl::DeviceImpl* BluetoothControl::Find(const string& address) {
+        Bluetooth::Address search(address.c_str());
+        std::list<DeviceImpl*>::const_iterator index = _devices.begin();
+
+        while ( (index != _devices.end()) && ((*index)->operator==(search) == false) ) { index++; }
+
+        return (index != _devices.end() ? (*index) : nullptr);
     }
 }
 }
