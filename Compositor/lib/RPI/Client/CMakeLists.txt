@@ -4,7 +4,6 @@ message("Setup ${TARGET} v${VERSION}...")
 
 find_package(Core REQUIRED)
 find_package(Plugins REQUIRED)
-find_package(LibVirtualKeyboard REQUIRED)
 find_package(VirtualInput REQUIRED)
 
 add_library(${TARGET} SHARED Implementation.cpp)
@@ -13,7 +12,7 @@ target_link_libraries(${TARGET}
             PUBLIC
             ${CORE_LIBRARIES}
             ${VIRTUALINPUT_LIBRARIES}
-            )
+            ${PLUGINS_LIBRARIES})
 
 set_target_properties(${TARGET} PROPERTIES
         CXX_STANDARD 11

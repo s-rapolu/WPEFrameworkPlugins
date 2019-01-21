@@ -86,6 +86,10 @@ namespace Nexus {
 
         NEXUS_DisplayHandle displayHandle(nullptr);
 
+#ifdef V3D_DRM_DISABLE
+        ::setenv("V3D_DRM_DISABLE", "1", 1);
+#endif
+
 #ifdef BACKEND_BCM_NEXUS_NXCLIENT
         NxClient_JoinSettings joinSettings;
         NxClient_GetDefaultJoinSettings(&joinSettings);

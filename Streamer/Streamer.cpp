@@ -20,12 +20,7 @@ static Core::ProxyPoolType<Web::JSONBodyType<Streamer::Data> > jsonBodyDataFacto
     _skipURL = _service->WebPrefix().length();
 
     config.FromString(_service->ConfigLine());
-    if (config.OutOfProcess.Value() == true) {
-        _player = _service->Instantiate<Exchange::IPlayer>(2000, _T("StreamerImplementation"), static_cast<uint32_t>(~0), _pid, service->Locator());
-    }
-    else {
-        _player = Core::ServiceAdministrator::Instance().Instantiate<Exchange::IPlayer>(Core::Library(), _T("StreamerImplementation"), static_cast<uint32_t>(~0));
-    }
+    _player = _service->Root<Exchange::IPlayer>(_pid, 2000, _T("StreamerImplementation"));
 
     if ((_player != nullptr) && (_service != nullptr)) {
         TRACE(Trace::Information, (_T("Successfully instantiated Streamer")));
@@ -295,7 +290,8 @@ Core::ProxyType<Web::Response> Streamer::PostMethod(Core::TextSegmentIterator& i
             if (index.Current() == _T("Create")) {
 
                 if (index.Next() == true) {
-                    Core::EnumerateType<Exchange::IStream::streamtype> type (index.Current());
+                    uint8_t streamtype = Core::NumberType<uint8_t> (index.Current());
+                    Core::EnumerateType<Exchange::IStream::streamtype> type (streamtype);
                     if (type.IsSet()) {
                         Core::ProxyType<Web::JSONBodyType<Data> > response(jsonBodyDataFactory.Element());
 

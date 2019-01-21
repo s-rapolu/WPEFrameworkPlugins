@@ -4,11 +4,11 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 message("Setting up ${PLUGIN_NAME}")
 
 set(PLUGIN_SOURCES
-    Controller.cpp  
+    WifiControl.cpp  
     Network.cpp      
     Module.cpp)
 
-if (WPEFRAMEWORK_PLUGIN_USE_RDK_HAL_WIFI)
+if (PLUGIN_USE_RDK_HAL_WIFI)
     target_compile_definitions(${MODULE_NAME} USE_WIFI_HAL)
     list(APPEND PLUGIN_SOURCES WifiHAL.cpp)
 else ()
