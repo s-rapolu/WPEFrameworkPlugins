@@ -7,9 +7,16 @@ set(PLUGIN_SOURCES
     TraceControl.cpp
     Module.cpp)
 
+if("${CMAKE_FIND_ROOT_PATH}" STREQUAL "")
+   # Desktop case: not cross compiling
+   link_directories("${CMAKE_INSTALL_PREFIX}/lib")
+endif()
+
 # Library definition section
 add_library(${MODULE_NAME} SHARED ${PLUGIN_SOURCES})
+
 target_link_libraries(${MODULE_NAME} ${PLUGINS_LIBRARIES})
+
 
 # Library installation section
 string(TOLOWER ${NAMESPACE} STORAGENAME)
