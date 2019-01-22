@@ -1,31 +1,35 @@
-set(PLUGIN_NAME Bluetooth)
+set(PLUGIN_NAME BluetoothControl)
+set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-set(WPEFRAMEWORK_PLUGIN_BLUETOOTH_AUTOSTART true CACHE STRING true)
-set(WPEFRAMEWORK_PLUGIN_BLUETOOTH_OOP false CACHE STRING true)
+message("Setting up ${PLUGIN_NAME}")
 
-include(module) # Setup default stuff needed for the cmake framework thingy.
-
-find_package(GLIB REQUIRED)
-find_package(DBUS REQUIRED)
-
-set(PLUGIN_DEFINITIONS)
-
-set(PLUGIN_OPTIONS)
-set(PLUGIN_LINK_OPTIONS -lglib-2.0 -ldbus-1 -lgio-2.0)
+find_package(Bluez REQUIRED)
+find_package(BCMHost QUIET)
+find_package(Nexus QUIET)
 
 set(PLUGIN_SOURCES
-        Module.cpp
-        Bluetooth.cpp
-        BluetoothImplementation.cpp)
+    BluetoothControl.cpp
+    Module.cpp)
 
+set(PLUGIN_BLUETOOTH_AUTOSTART true CACHE STRING true)
+set(PLUGIN_BLUETOOTH_OOP false CACHE STRING true)
 
-set(PLUGIN_INPUT
-    ${PLUGIN_SOURCES}
-    ${PLUGIN_INCLUDES})
+# Library definition section
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/drivers" ${BLUEZ_INCLUDE_DIRS})
+add_library(${MODULE_NAME} SHARED ${PLUGIN_SOURCES})
+add_compiler_flags(${MODULE_NAME} "${PLUGINS_DEFINITIONS}")
+target_link_libraries(${MODULE_NAME} ${PLUGINS_LIBRARIES} ${BLUEZ_LIBRARIES})
 
-list(APPEND PLUGIN_DEPENDENCIES_INCLUDE_DIRS ${WPEFRAMEWORK_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS} ${DBUS_INCLUDE_DIRS} ${WPE_WEBKIT_INCLUDE_DIRS})
-list(APPEND PLUGIN_DEPENDENCIES ${GLIB_GIO_LIBRARIES} ${GLIB_LIBRARIES} ${DBUS_LIBRARIES})
+if (NEXUS_FOUND)
+    target_sources(${MODULE_NAME} PRIVATE drivers/Basic.cpp)
+elseif (BCM_HOST_FOUND)
+    target_sources(${MODULE_NAME} PRIVATE drivers/BCM43XX.cpp)
+else ()
+    message(FATAL_ERROR "There is no Bluetooth driver backend for Bluetooth plugin")
+endif ()
 
-include(default_targets) # This is a regular plugin no need to edit the defaults
+# Library installation section
+string(TOLOWER ${NAMESPACE} STORAGENAME)
+install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${STORAGENAME}/plugins)
 
 write_config(${PLUGIN_NAME})

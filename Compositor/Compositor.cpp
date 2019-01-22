@@ -47,7 +47,7 @@ namespace Plugin {
         _composition = service->Root<Exchange::IComposition>(_pid, 2000, _T("CompositorImplementation"));
         
         if (_composition == nullptr) {
-            message = "Instantiating the compositor failed. Could not load: " + config.Locator.Value();
+            message = "Instantiating the compositor failed. Could not load: CompositorImplementation";
         }
         else {
             _service = service;
@@ -446,11 +446,12 @@ namespace Plugin {
     }
 
     uint32_t Compositor::PutBelow(const string& callsignRelativeTo, const string& callsignToReorder) {
-         ASSERT(_composition != nullptr);
+        ASSERT(_composition != nullptr);
 
-         ASSERT(false); // not implemeted for now, we'll do that when it is needed
+        ASSERT(false); // not implemeted for now, we'll do that when it is neede
+                       // now  the logic supports only putting the callsignToReorder to the bottom
 
-         return Core::ERROR_UNAVAILABLE;
+        //return Core::ERROR_UNAVAILABLE;
 
         uint32_t error = Core::ERROR_NONE;
 

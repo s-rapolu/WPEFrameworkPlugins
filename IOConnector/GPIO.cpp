@@ -36,105 +36,14 @@ namespace GPIO {
 // Class: PIN
 // ----------------------------------------------------------------------------------------------------
 
-/* static */ Pin::Monitor Pin::_monitor;
-
-Pin::Pin(const uint8_t pin)
-    : _pin(pin)
+Pin::Pin(const uint8_t pin, const bool activeLow)
+    : BaseClass(pin, IExternal::regulator, IExternal::general, IExternal::logic, 0)
+    , _pin(pin)
+    , _activeLow(activeLow ? 1 : 0)
+    , _lastValue(false)
     , _descriptor(-1) {
-}
-
-/* virtual */ Pin::~Pin() {
-      if (_descriptor != -1)
-      {
-        if (_observers.size() > 0) {
-            // Please unregister all observers before dumping the pin.
-            ASSERT(false);
-            _monitor.Unregister(*this);
-        }
-
-        close (_descriptor);
-        _descriptor = -1;
-
-        int fd = open ("/sys/class/gpio/unexport", O_WRONLY);
-        if (fd > 0) {
-          // Time to register the pin
-          char buffer[16];
-          int index = 0;
-          int pin = _pin;
-          do {
-            index++;
-            buffer[sizeof(buffer) - index] = '0' + (pin % 10);
-            pin /= 10;
-          } while ((pin > 0) && (index < static_cast<int>(sizeof(buffer) - 1)));
-
-          write(fd, &(buffer[sizeof(buffer) - index]), index);
-          close(fd);
-        }
-      }
-}
-
-void Pin::Register(IObserver* callback) {
-
-    _adminLock.Lock();
-
-    // Only register a callback once.
-    ASSERT (std::find(_observers.begin(), _observers.end(), callback) == _observers.end());
-
-    // It is the first subscriber, Add it..
-    _observers.push_back(callback);
-
-    if (_observers.size() == 1) {
-        _monitor.Register (*this);
-    }
-
-    _adminLock.Unlock();
-}
-
-void Pin::Unregister(IObserver* callback) {
-
-    _adminLock.Lock();
-
-    std::list<IObserver*>::iterator index (std::find(_observers.begin(), _observers.end(), callback));
-
-    // Do not unregister a callback that you did not register!!!
-    ASSERT(index != _observers.end());
-
-    if (index != _observers.end()) {
-
-        // Now it is time to reevaluate, as the map is loosing an entry.
-        _observers.erase(index);
-
-        if (_observers.size() == 0) {
-            _monitor.Unregister (*this);
-        }
-    }
-
-    _adminLock.Unlock();
-}
-
-
-void Pin::Flush() {
-
-    if (_descriptor != -1) {
-
-        int count;
-
-        ioctl(_descriptor, FIONREAD, &count);
-
-        while (count-- != 0) {
-
-            char buffer;
-            read(_descriptor, &buffer, 1);
-        }
-
-        lseek(_descriptor, 0, SEEK_SET);
-    }
-}
-
-int Pin::Descriptor() const {
-
-      if ((_pin != 0xFF) && (_descriptor == -1))
-      {
+    if (_pin != 0xFF) 
+    {
         struct stat properties;
         char buffer[64];
         sprintf(buffer, "/sys/class/gpio/gpio%d/value", _pin);
@@ -159,13 +68,82 @@ int Pin::Descriptor() const {
 	}
 
         _descriptor = open(buffer, O_RDWR);
-      }
+    }
 
+    _lastValue = Get();
+}
+
+/* virtual */ Pin::~Pin() {
+      if (_descriptor != -1)
+      {
+        Core::ResourceMonitor::Instance().Unregister(*this);
+
+        close (_descriptor);
+        _descriptor = -1;
+
+        int fd = open ("/sys/class/gpio/unexport", O_WRONLY);
+        if (fd > 0) {
+          // Time to register the pin
+          char buffer[16];
+          int index = 0;
+          int pin = _pin;
+          do {
+            index++;
+            buffer[sizeof(buffer) - index] = '0' + (pin % 10);
+            pin /= 10;
+          } while ((pin > 0) && (index < static_cast<int>(sizeof(buffer) - 1)));
+
+          write(fd, &(buffer[sizeof(buffer) - index]), index);
+          close(fd);
+        }
+      }
+}
+
+void Pin::Flush() {
+
+    if (_descriptor != -1) {
+
+        int count;
+
+        ioctl(_descriptor, FIONREAD, &count);
+
+        while (count-- != 0) {
+
+            char buffer;
+            read(_descriptor, &buffer, 1);
+        }
+
+        lseek(_descriptor, 0, SEEK_SET);
+    }
+}
+
+/* virtual */ Core::IResource::handle Pin::Descriptor() const {
       return (_descriptor);
 }
 
+/* virtual */ uint16_t Pin::Events() {
+    return (_descriptor != -1 ? (POLLPRI|POLLERR) : 0);
+}
+
+/* virtual */ void Pin::Handle(const uint16_t events) {
+
+    if ((events & (POLLPRI|POLLERR)) != 0) {
+
+        unsigned char buffer[1];
+
+        read(_descriptor, &buffer, sizeof(buffer));
+
+        // If we are only triggered on a falling edge, or a rising edge
+        // the change is not detected compared to the previous value, 
+        // force HasChanged to be true!!
+        _lastValue = !Get();
+
+        Updated();
+    }
+}
+
 void Pin::Trigger (const trigger_mode mode) {
-    if (Descriptor() != -1) {
+    if (_descriptor != -1) {
 	// Oke looks like we have a valid pin.
         char buffer[64];
         sprintf(buffer, "/sys/class/gpio/gpio%d/edge", _pin);
@@ -184,27 +162,46 @@ void Pin::Trigger (const trigger_mode mode) {
     }
 }
 
+bool Pin::HasChanged() const {
+    bool result = false;
+
+    return (Get() != _lastValue);
+}
+
+void Pin::Align() {
+    _lastValue = Get();
+}
+
 bool Pin::Get() const {
     bool result = false;
 
-    if (Descriptor() != -1) {
+    if (_descriptor != -1) {
         uint8_t value;
         lseek(_descriptor, 0, SEEK_SET);
         read(_descriptor, &value, 1);
         result = (value != '0');
+        if (_activeLow != 0) {
+           result = !result;
+        }
     }
     return (result);
 }
 
 void Pin::Set(const bool value) {
-    if (Descriptor() != -1) {
-        uint8_t newValue = (value ? '1' : '0');
+    if (_descriptor != -1) {
+        uint8_t newValue;
+        if (_activeLow != 0) {
+           newValue = (value ? '0' : '1');
+        }
+        else {
+           newValue = (value ? '1' : '0');
+        }
         write (_descriptor, &newValue, 1);
     }
 }
 
 void Pin::Mode(const pin_mode mode) {
-     if (Descriptor() != -1) {
+     if (_descriptor != -1) {
 	// Oke looks like we have a valid pin.
         char buffer[64];
         sprintf(buffer, "/sys/class/gpio/gpio%d/direction", _pin);
@@ -226,7 +223,7 @@ void Pin::Mode(const pin_mode mode) {
 }
 
 void Pin::Pull (const pull_mode mode) {
-    if (Descriptor() != -1) {
+    if (_descriptor != -1) {
 	// Oke looks like we have a valid pin.
         char buffer[64];
         sprintf(buffer, "/sys/class/gpio/gpio%d/active_low", _pin);
@@ -248,5 +245,28 @@ void Pin::Pull (const pull_mode mode) {
     }
 }
 
+/* virtual */ void Pin::Trigger() {
+    if (HasChanged() == true) {
+        BaseClass::Updated();
+    }
+}
+
+/* virtual */ uint32_t Pin::Get(int32_t& value) const {
+    value = (Get() ? 1 : 0);
+    return (Core::ERROR_NONE);
+}
+
+/* virtual */ uint32_t Pin::Set(const int32_t value) {
+    Set(value != 0);
+    return (Core::ERROR_NONE);
+}
+    
+/* virtual */ void Pin::Schedule(const Core::Time& time, const Core::ProxyType<Core::IDispatch>& job) {
+    PluginHost::WorkerPool::Instance().Schedule(time, job);
+}
+
+/* virtual */ void Pin::Revoke(const Core::ProxyType<Core::IDispatch>& job) {
+    PluginHost::WorkerPool::Instance().Revoke(job);
+}
 
 } } // namespace WPEFramework::Linux

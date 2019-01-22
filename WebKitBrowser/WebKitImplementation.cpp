@@ -68,8 +68,7 @@ namespace Plugin {
         nullptr, // didReceiveAuthenticationChallenge
         // webProcessDidCrash
         [](WKPageRef page, const void*) {
-         fprintf(stderr, "ERROR: WebProcess crashed: exiting ...\n");
-         fflush(stderr);
+         SYSLOG(Trace::Fatal, ("CRASH: WebProcess crashed, exiting..."));
          exit(1);
         },
         nullptr, // copyWebCryptoMasterKey
@@ -337,6 +336,7 @@ static GSourceFuncs _handlerIntervention =
                 , Width(1280)
                 , Height(720)
                 , PTSOffset(0)
+                , ScaleFactor(1.0)
             {
                 Add(_T("useragent"), &UserAgent);
                 Add(_T("url"), &URL);
@@ -371,6 +371,7 @@ static GSourceFuncs _handlerIntervention =
                 Add(_T("width"), &Width);
                 Add(_T("height"), &Height);
                 Add(_T("ptsoffset"), &PTSOffset);
+                Add(_T("scalefactor"), &ScaleFactor);
             }
             ~Config()
             {
@@ -410,6 +411,7 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::DecUInt16 Width;
             Core::JSON::DecUInt16 Height;
             Core::JSON::DecSInt16 PTSOffset;
+            Core::JSON::DecUInt16 ScaleFactor;
         };
 
     private:
@@ -1061,6 +1063,8 @@ static GSourceFuncs _handlerIntervention =
 
             WKPageSetProxies(_page, nullptr);
 	
+            WKPageSetCustomBackingScaleFactor(_page, _config.ScaleFactor.Value());
+
             if (_config.Automation.Value()) {
                 _handlerAutomation.base.clientInfo = static_cast<void*>(this);
                 WKContextSetAutomationClient(context, &_handlerAutomation.base);

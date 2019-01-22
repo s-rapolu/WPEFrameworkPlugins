@@ -7,7 +7,7 @@
 namespace WPEFramework {
 namespace Plugin {
 
-    class RtspClientImplementation : public Exchange::IRtspClient {
+    class RtspClientImplementation : public Exchange::IRtspClient, RtspSession::AnnouncementHandler {
     private:
 
         class Config : public Core::JSON::Container {
@@ -20,6 +20,8 @@ namespace Plugin {
                 : Core::JSON::Container()
                 , TestNum(0)
             {
+                Add(_T("hostname"), &Hostname);
+                Add(_T("port"), &Port);
                 Add(_T("testNum"), &TestNum);
                 Add(_T("testStr"), &TestStr);
             }
@@ -28,6 +30,8 @@ namespace Plugin {
             }
 
         public:
+            Core::JSON::String Hostname;
+            Core::JSON::DecUInt16 Port;
             Core::JSON::DecUInt16 TestNum;
             Core::JSON::String TestStr;
         };
@@ -39,7 +43,7 @@ namespace Plugin {
     public:
         RtspClientImplementation()
             : _observers()
-            , str("Nothing set")
+            , _rtspSession(*this)
         {
             TRACE_L1("%s: Initializing", __FUNCTION__);
         }
@@ -51,22 +55,19 @@ namespace Plugin {
         uint32_t Configure(PluginHost::IShell* service)
         {
             ASSERT(service != nullptr);
-
-            Config config;
-            config.FromString(service->ConfigLine());
-
             uint32_t result = 0;
+
+            config.FromString(service->ConfigLine());
 
             return (result);
         }
 
+        // Exchange::IRtspClient
         uint32_t Setup(const string& assetId, uint32_t position)
         {
             RtspReturnCode rc = ERR_OK;
 
-            string host = "Heisenberg";        // XXX: Move it to config file
-            uint16_t port = 5554;
-            rc = _rtspSession.Initialize(host, port);
+            rc = _rtspSession.Initialize(config.Hostname.Value().c_str(), config.Port.Value());
 
             if (rc == ERR_OK) {
                 rc = _rtspSession.Open(assetId, position);
@@ -78,7 +79,6 @@ namespace Plugin {
         {
             RtspReturnCode rc = ERR_OK;
 
-            TRACE_L2( "%s: scale=%d position=%d", __FUNCTION__, scale, position);
             rc = _rtspSession.Play((float_t) scale/1000, position);
 
             return rc;
@@ -96,11 +96,20 @@ namespace Plugin {
 
         void Set(const string& name, const string& value)
         {
+            _rtspSession.Set(name, value);
         }
 
         string Get(const string& name) const
         {
-            return (str);
+            string value;
+            RtspReturnCode rc = _rtspSession.Get(name, value);
+            return value;
+        }
+
+        // RtspSession::AnnouncementHandler
+        void announce(const RtspAnnounce& announcement)
+        {
+            TRACE_L1("%s: Announcement received. code =", __FUNCTION__, announcement.GetCode());
         }
 
         BEGIN_INTERFACE_MAP(RtspClientImplementation)
@@ -108,9 +117,9 @@ namespace Plugin {
         END_INTERFACE_MAP
 
     private:
-        RtspSession _rtspSession;
         std::list<PluginHost::IStateControl::INotification*> _observers;
-        string str;
+        RtspSession _rtspSession;
+        Config config;
     };
 
     SERVICE_REGISTRATION(RtspClientImplementation, 1, 0);

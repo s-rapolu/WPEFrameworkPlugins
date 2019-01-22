@@ -1,94 +1,103 @@
 #ifndef RTSPSESSION_H
 #define RTSPSESSION_H
 
-#include <plugins/Logging.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <linux/netlink.h>
+
+#include <core/NodeId.h>
+#include <core/SocketPort.h>
 #include <core/Queue.h>
-#include <core/Thread.h>
+#include <core/Timer.h>
 
+#include "RtspCommon.h"
 #include "RtspParser.h"
-#include "RtspSocket.h"
 
-class RtspParser;
 
 namespace WPEFramework {
 namespace Plugin {
 
-#define KB(x)   (x*1000)
-#define MB(x)   (x*1000)
+typedef Core::QueueType<RtspMessagePtr> RequestQueue;
+typedef Core::QueueType<RtspMessagePtr> ResponseQueue;
 
 
-enum RtspReturnCode {
-    ERR_OK,
-    ERR_UNKNOWN,
-    ERR_ACTIVE,
-    ERR_CONNECT_FAILED,
-    ERR_SESSION_FAILED,
-    ERR_NO_MORE,
-    ERR_TIMED_OUT,
-
-};
-
-class RtspMessage
+class RtspSession
 {
     public:
-    string message;
-    bool bStreamRequest;
-};
+        class Socket : public Core::SocketStream
+        {
+            public:
+            Socket(const Core::NodeId &local, const Core::NodeId &remote, RtspSession& rtspSession);
+            virtual ~Socket();
+            uint16_t SendData(uint8_t* dataFrame, const uint16_t maxSendSize);
+            uint16_t ReceiveData(uint8_t* dataFrame, const uint16_t receivedSize);
+            void StateChange();
 
-typedef Core::QueueType<RtspMessage> MessageQueue;
+            private:
+                RtspSession& _rtspSession;
+       };
 
+        class AnnouncementHandler {
+            public:
+            virtual void announce(const RtspAnnounce& announcement) = 0;
+        };
 
-class RtspSession : public Core::Thread
-{
+        class HeartbeatTimer {
+        public:
+            HeartbeatTimer(RtspSession& parent)
+                : _parent(&parent)
+            {
+            }
+            HeartbeatTimer(const HeartbeatTimer& copy)
+                : _parent(copy._parent)
+            {
+            }
+            ~HeartbeatTimer()
+            {
+            }
+
+            HeartbeatTimer& operator=(const HeartbeatTimer& RHS)
+            {
+                _parent = RHS._parent;
+                return (*this);
+            }
+
+        public:
+            uint64_t Timed(const uint64_t scheduledTime)
+            {
+                ASSERT(_parent != nullptr);
+                return (_parent->Timed(scheduledTime));
+            }
+
+        private:
+            RtspSession* _parent;
+        };
+
     public:
-        RtspSession();
+        RtspSession(RtspSession::AnnouncementHandler& handler);
         ~RtspSession();
         RtspReturnCode Initialize(const string& hostname, uint16_t port);
         RtspReturnCode Terminate();
         RtspReturnCode Open(const string assetId, uint32_t position = 0, const string &reqCpeId = "", const string &remoteIp = "");
         RtspReturnCode Close();
         RtspReturnCode Play(float scale, uint32_t position = 0);
-        RtspReturnCode GetProp(const string name, string &value);
+        RtspReturnCode Get(const string name, string &value) const;
+        RtspReturnCode Set(const string& name, const string& value);
 
-        RtspReturnCode GetParam(bool bSRM);
+        RtspReturnCode Send(const RtspMessagePtr& request);
         RtspReturnCode SendHeartbeat(bool bSRM);
         RtspReturnCode SendHeartbeats();
 
-        RtspReturnCode Check(bool bSRM, int timeout, string *pStr = NULL);
-        RtspReturnCode CheckResponse(bool bStream);
-        RtspReturnCode CheckAnnouncement();
+        RtspReturnCode ProcessResponse(const string &response, bool bSRM);
         RtspReturnCode ProcessAnnouncement(const std::string &response, bool bSRM);
         RtspReturnCode SendResponse(int respSeq, bool bSRM);
         RtspReturnCode SendAnnouncement(int code, const string &reason);
 
-        enum Type {
-            RTSP_SETUP = 1,
-            RTSP_PLAY,
-            RTSP_TEARDOWN,
-            RTSP_GETPARAM
-        };
-
-        enum AnnounceCode {
-            PlayoutStalled              = 1103,
-            PlayoutResumed              = 1104,
-            NewScale                    = 1500,
-            EosReached                  = 2101,
-            BosReached                  = 2104,
-            StreamStateChange           = 2199,
-            TicketExpired               = 2401,
-            SessionTornDown_heartbeat   = 2403,
-            SessionTornDown             = 2406,
-            DataError                   = 4400,
-            SvrRsrcNotAvailable         = 5200,
-            InternalServerError         = 5502,
-            ServerShutdown              = 5403,
-            StreamChange                = 5999
-        };
+        uint64_t Timed(const uint64_t scheduledTime);
 
     private:
-        uint32_t Worker ();
-        inline  RtspSocket& GetSocket(bool bSRM)    {
-            return (bSRM || _sessionInfo.bSrmIsRtspProxy) ? _srmSocket : _controlSocket;
+        inline  RtspSession::Socket& GetSocket(bool bSRM)    {
+            return (bSRM || _sessionInfo.bSrmIsRtspProxy) ? *_srmSocket : *_controlSocket;
         }
 
         inline bool IsSrmRtspProxy() {
@@ -96,19 +105,25 @@ class RtspSession : public Core::Thread
         }
 
     private:
-        RtspSocket _srmSocket;          // XXX: Replace RtspSocket with Core::Socket
-        RtspSocket _controlSocket;
+        static constexpr uint16_t ResponseWaitTime = 3000;
+        static constexpr uint16_t NptUpdateInterwal = 1000;
+
+        Core::NodeId _remote;
+        Core::NodeId _local;
+        RtspSession::Socket *_srmSocket;
+        RtspSession::Socket *_controlSocket;
+        RtspSession::AnnouncementHandler& _announcementHandler;
         RtspParser _parser;
         RtspSessionInfo _sessionInfo;
-        MessageQueue _requestQueue;
-        MessageQueue _responseQueue;
         Core::CriticalSection _adminLock;
+        RequestQueue _requestQueue;
+        ResponseQueue _responseQueue;
+        Core::TimerType<HeartbeatTimer> _heartbeatTimer;
 
         bool _isSessionActive;
         int _nextSRMHeartbeatMS;
-        int _nextPumpHeartbearMS;
+        int _nextPumpHeartbeatMS;
         int _playDelay;
-
 };
 
 }} // WPEFramework::Plugin
