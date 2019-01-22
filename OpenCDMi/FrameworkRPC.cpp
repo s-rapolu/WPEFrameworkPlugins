@@ -1149,7 +1149,7 @@ namespace Plugin {
                         if ( designator.empty() == false )  {
                             if( factory != factories.end() ) {
                                 _systemToFactory.insert(std::pair<const std::string, SystemFactory>(designator, factory->second));
-
+                                TRACE_L1("Added DRM factory: %s -> %s", designator.c_str(), system.c_str());
                             }
                             else {
                                 SYSLOG(Logging::Startup, (_T("Required factory [%s], not found for [%s]"), system.c_str(), designator.c_str()));
