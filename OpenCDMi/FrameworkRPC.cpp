@@ -211,19 +211,22 @@ namespace Plugin {
                             if (IsRunning() == true) {
                                 uint8_t keyIdLength = 0;
                                 const uint8_t* keyIdData = KeyId(keyIdLength);
-                                int cr = _mediaKeys->Decrypt(
-                                    _sessionKey,
-                                    _sessionKeyLength,
-                                    nullptr, //subsamples
-                                    0, //number of subsamples
-                                    IVKey(),
-                                    IVKeyLength(),
-                                    Buffer(),
-                                    BytesWritten(),
-                                    &clearContentSize,
-                                    &clearContent,
-                                    keyIdLength,
-                                    keyIdData);
+
+//                                int cr = _mediaKeys->Decrypt(
+//                                    _sessionKey,
+//                                    _sessionKeyLength,
+//                                    nullptr,       //subsamples
+//                                    0,          //number of subsamples
+//                                    IVKey(),
+//                                    IVKeyLength(),
+//                                    Buffer(),
+//                                    BytesWritten(),
+//                                    &clearContentSize,
+//                                    &clearContent,
+//                                    keyIdLength,
+//                                    keyIdData);
+                                unsigned long long byteOffset = ByteOffset();
+				                int cr = _mediaKeysExt->DecryptNetflix(IVKey(), IVKeyLength(), byteOffset, Buffer(), BytesWritten(), InitWithLast15());
 
                                 if ((cr == 0) && (clearContentSize != 0)) {
                                     if (clearContentSize != BytesWritten()) {
