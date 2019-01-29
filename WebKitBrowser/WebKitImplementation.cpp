@@ -333,6 +333,7 @@ static GSourceFuncs _handlerIntervention =
                 , EnvironmentOverride(false)
                 , Automation(false)
                 , WebGLEnabled(true)
+                , WebRTCEnabled(true)
                 , ThreadedPainting()
                 , Width(1280)
                 , Height(720)
@@ -368,6 +369,7 @@ static GSourceFuncs _handlerIntervention =
                 Add(_T("environmentoverride"), &EnvironmentOverride);
                 Add(_T("automation"), &Automation);
                 Add(_T("webgl"), &WebGLEnabled);
+                Add(_T("webrtc"), &WebRTCEnabled);
                 Add(_T("threadedpainting"), &ThreadedPainting);
                 Add(_T("width"), &Width);
                 Add(_T("height"), &Height);
@@ -408,6 +410,7 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::Boolean EnvironmentOverride;
             Core::JSON::Boolean Automation;
             Core::JSON::Boolean WebGLEnabled;
+            Core::JSON::Boolean WebRTCEnabled;
             Core::JSON::String ThreadedPainting;
             Core::JSON::DecUInt16 Width;
             Core::JSON::DecUInt16 Height;
@@ -1009,6 +1012,11 @@ static GSourceFuncs _handlerIntervention =
 
             // Turn off log message to stdout.
             WKPreferencesSetLogsPageMessagesToSystemConsoleEnabled(preferences, false);
+
+            // Turn on/off WebRTC.
+            WKPreferencesSetMediaStreamEnabled(preferences, _config.WebRTCEnabled.Value());
+            WKPreferencesSetPeerConnectionEnabled(preferences, _config.WebRTCEnabled.Value());
+            WKPreferencesSetMediaDevicesEnabled(preferences, _config.WebRTCEnabled.Value());
 
             // Turn on gamepads.
             WKPreferencesSetGamepadsEnabled(preferences, true);
