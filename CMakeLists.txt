@@ -27,6 +27,7 @@ option(PLUGIN_WEBSERVER "Include WebServer plugin" OFF)
 option(PLUGIN_WEBSHELL "Include WebShell plugin" OFF)
 option(PLUGIN_TVCONTROL "Include TVControl plugin" OFF)
 option(PLUGIN_WIFICONTROL "Include WifiControl plugin" OFF)
+option(PLUGIN_SYSTEMCOMMANDS "Include SystemCommands plugin" ON)
 
 # This contains all kinds of plugins (publicely available, so they all need the plugin support library !!
 find_package(Plugins REQUIRED)
@@ -151,4 +152,8 @@ endif()
 
 if(PLUGIN_RTSPCLIENT)
     add_subdirectory(RtspClient)
+endif()
+
+if(PLUGIN_SYSTEMCOMMANDS)
+    add_subdirectory(SystemCommands)
 endif()
