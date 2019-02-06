@@ -687,10 +687,11 @@ namespace Plugin {
                             const string message("{\"callsign\": \"" + service->Callsign() + "\", \"action\": \"Restart\", \"reason\":\"" + (std::to_string(index->second.RestartLimit())).c_str() + " Attempts Failed\"}");
                             _service->Notify(message);
                             index->second.ResetRestartCount();
+                        } else {
+                            index->second.IncrRestartCount();
+                            TRACE(Trace::Information, (_T("Restarting %s again because we detected it was shutdown.\n"), service->Callsign().c_str()));
+                            PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(service, PluginHost::IShell::ACTIVATED, PluginHost::IShell::AUTOMATIC));
                         }
-                        index->second.IncrRestartCount();
-                        TRACE(Trace::Information, (_T("Restarting %s again because we detected it was shutdown.\n"), service->Callsign().c_str()));
-                        PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(service, PluginHost::IShell::ACTIVATED, PluginHost::IShell::AUTOMATIC));
                     }
                 }
 
