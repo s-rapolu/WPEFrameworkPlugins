@@ -477,10 +477,6 @@ namespace Plugin {
                 {
                     _restartCount++;
                 }
-                inline void ResetRestartCount()
-                {
-                    _restartCount = 0;
-                }
                 inline uint32_t RestartCount() const
                 {
                     return _restartCount;
@@ -686,7 +682,11 @@ namespace Plugin {
                             TRACE(Trace::Error, (_T("Restarting of %s Failed : Tried %d attempts.\n"), service->Callsign().c_str(),index->second.RestartLimit()));
                             const string message("{\"callsign\": \"" + service->Callsign() + "\", \"action\": \"Restart\", \"reason\":\"" + (std::to_string(index->second.RestartLimit())).c_str() + " Attempts Failed\"}");
                             _service->Notify(message);
-                            index->second.ResetRestartCount();
+                            _monitor.erase(index);
+                            if (_monitor.empty()) {
+                                // There's nothing left to monitor. Go away too in this case.
+                                ForceShutdown(_service->Callsign(), Core::EnumerateType<PluginHost::IShell::reason>(PluginHost::IShell::AUTOMATIC));
+                            }
                         } else {
                             index->second.IncrRestartCount();
                             TRACE(Trace::Information, (_T("Restarting %s again because we detected it was shutdown.\n"), service->Callsign().c_str()));
@@ -753,6 +753,21 @@ namespace Plugin {
             END_INTERFACE_MAP
 
         private:
+            void ForceShutdown(const std::string& callsign, const Core::EnumerateType<PluginHost::IShell::reason>& why)
+            {
+                PluginHost::IShell* plugin(_service->QueryInterfaceByCallsign<PluginHost::IShell>(callsign));
+
+                if (plugin != nullptr) {
+                    const string message("{\"callsign\": \"" + plugin->Callsign() + "\", \"action\": \"Deactivate\", \"reason\": \"" + why.Data() + "\" }");
+                    SYSLOG(Trace::Fatal, (_T("FORCED Shutdown: %s by reason: %s."), plugin->Callsign().c_str(), why.Data()));
+
+                    _service->Notify(message);
+
+                    PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(plugin, PluginHost::IShell::DEACTIVATED, why.Value()));
+
+                    plugin->Release();
+                }
+            }
             // Probe can be run in an unlocked state as the destruction of the observer list
             // is always done if the thread that calls the Probe is blocked (paused)
             void Probe()
@@ -770,20 +785,8 @@ namespace Plugin {
                         uint32_t value (info.Evaluate());
 
                         if ( (value & (MonitorObject::NOT_OPERATIONAL|MonitorObject::EXCEEDED_MEMORY)) != 0 ) {
-                            PluginHost::IShell* plugin(_service->QueryInterfaceByCallsign<PluginHost::IShell>(index->first));
-
-                            if (plugin != nullptr) {
-                                Core::EnumerateType<PluginHost::IShell::reason> why (((value & MonitorObject::EXCEEDED_MEMORY) != 0) ? PluginHost::IShell::MEMORY_EXCEEDED : PluginHost::IShell::FAILURE);
-
-                                const string message("{\"callsign\": \"" + plugin->Callsign() + "\", \"action\": \"Deactivate\", \"reason\": \"" + why.Data() + "\" }");
-                                SYSLOG(Trace::Fatal, (_T("FORCED Shutdown: %s by reason: %s."), plugin->Callsign().c_str(), why.Data()));
-
-                                _service->Notify(message);
-                                
-                                PluginHost::WorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(plugin, PluginHost::IShell::DEACTIVATED, why.Value()));
-
-                                plugin->Release();
-                            }
+                            Core::EnumerateType<PluginHost::IShell::reason> why (((value & MonitorObject::EXCEEDED_MEMORY) != 0) ? PluginHost::IShell::MEMORY_EXCEEDED : PluginHost::IShell::FAILURE);
+                            ForceShutdown(index->first, why);
                         }
                         info.Retrigger(scheduledTime);
                     }
