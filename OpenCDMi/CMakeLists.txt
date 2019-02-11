@@ -3,6 +3,9 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 message("Setting up ${PLUGIN_NAME}")
 
+option(PLUGIN_OCDM_PLAYREADY_READ_DIR "Playready read-dir" "/root/Netflix/data/dpi/playready")
+option(PLUGIN_OCDM_PLAYREADY_STORE_LOCATION "Playready store-location" "/root/Netflix/data/dpi/playready/storage/drmstore")
+
 set(PLUGIN_SOURCES 
         OCDM.cpp
         CENCParser.cpp
