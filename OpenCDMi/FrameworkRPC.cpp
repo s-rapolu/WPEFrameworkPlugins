@@ -947,21 +947,34 @@ namespace Plugin {
                 return ::OCDM::OCDM_RESULT::OCDM_S_FALSE;
             }
 
-            OCDM::OCDM_RESULT TeardownSystemNetflix() override
+            OCDM::OCDM_RESULT TeardownSystemNetflix(const std::string & keySystem) override
             {
-                return _systemExt->TeardownSystemNetflix();
+                CDMi::IMediaKeysExt* systemExt = dynamic_cast<CDMi::IMediaKeysExt*>(_parent.KeySystem(keySystem));
+                if (systemExt) {
+                    return systemExt->TeardownSystemNetflix();
+                }
+                return -1;
             }
 
-            OCDM::OCDM_RESULT DeleteSecureStore() override
+            OCDM::OCDM_RESULT DeleteSecureStore(const std::string & keySystem) override
             {
-                return _systemExt->DeleteSecureStore();
+                CDMi::IMediaKeysExt* systemExt = dynamic_cast<CDMi::IMediaKeysExt*>(_parent.KeySystem(keySystem));
+                if (systemExt) {
+                    return systemExt->DeleteSecureStore();
+                }
+                return -1;
             }
 
             OCDM::OCDM_RESULT GetSecureStoreHash(
+                    const std::string & keySystem,
                     uint8_t secureStoreHash[],
-                    uint32_t secureStoreHashLength)
+                    uint32_t secureStoreHashLength) override
             {
-                return _systemExt->GetSecureStoreHash(secureStoreHash, secureStoreHashLength);
+                CDMi::IMediaKeysExt* systemExt = dynamic_cast<CDMi::IMediaKeysExt*>(_parent.KeySystem(keySystem));
+                if (systemExt) {
+                    return systemExt->GetSecureStoreHash(secureStoreHash, secureStoreHashLength);
+                }
+                return -1;
             }
 
 
