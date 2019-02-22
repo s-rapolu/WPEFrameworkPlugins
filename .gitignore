@@ -9,3 +9,4 @@ CTestTestfile.cmake
 output/
 .DS_Store
 .vscode
+*/*.so
