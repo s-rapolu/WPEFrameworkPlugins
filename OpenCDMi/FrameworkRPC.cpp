@@ -354,7 +354,7 @@ namespace Plugin {
                     , _keySystem(keySystem)
                     , _sessionId(mediaKeySession->GetSessionId())
                     , _mediaKeySession(mediaKeySession)
-                    , _mediaKeySessionExt(dynamic_cast<CDMi::IMediaKeySessionExt*>(mediaKeySession))
+                    , _mediaKeySessionExt(nullptr)
                     , _sink(this, callback)
                     , _buffer(new DataExchange(mediaKeySession, bufferName, defaultSize))
                     , _cencData(*sessionData) {
@@ -395,7 +395,9 @@ namespace Plugin {
                     // This constructor can only be used for extended OCDM sessions.
                     ASSERT (_mediaKeySessionExt != nullptr);
 
+                    TRACE_L1("Constructed the Session Server side: %p", this);
                     _mediaKeySession->Run(&_sink);
+                    TRACE_L1("Constructed the Session Server side: %p", this);
                 }
 
                 virtual ~SessionImplementation() {
@@ -525,6 +527,11 @@ namespace Plugin {
                     return (OCDM::OCDM_RESULT)_mediaKeySessionExt->GetChallengeDataNetflix(challenge, challengeSize, isLDL);
                 }
 
+                virtual OCDM::OCDM_RESULT CancelChallengeDataNetflix() override {
+                    // TODO: conversion
+                    return (OCDM::OCDM_RESULT)_mediaKeySessionExt->CancelChallengeDataNetflix();
+                }
+
                 virtual OCDM::OCDM_RESULT StoreLicenseData(const uint8_t licenseData[], uint32_t licenseDataSize, unsigned char * secureStopId) override {
                     // TODO: conversion
                     return (OCDM::OCDM_RESULT)_mediaKeySessionExt->StoreLicenseData(licenseData, licenseDataSize, secureStopId);
@@ -533,6 +540,11 @@ namespace Plugin {
                 virtual OCDM::OCDM_RESULT InitDecryptContextByKid() override {
                     // TODO: conversion
                     return (OCDM::OCDM_RESULT)_mediaKeySessionExt->InitDecryptContextByKid();
+                }
+
+                virtual OCDM::OCDM_RESULT CleanDecryptContext() override {
+                    // TODO: conversion
+                    return (OCDM::OCDM_RESULT)_mediaKeySessionExt->CleanDecryptContext();
                 }
 
                 BEGIN_INTERFACE_MAP(Session)
@@ -1005,10 +1017,22 @@ namespace Plugin {
 
                     mediaKeySession->Run(nullptr);
 
-                    CDMi::IMediaKeys* system = _parent.KeySystem(keySystem);
+                    CDMi::IMediaKeysExt* systemExt = dynamic_cast<CDMi::IMediaKeysExt*>(_parent.KeySystem(keySystem));
 
-                    if (system != nullptr) {
-                        system->DestroyMediaKeySession(mediaKeySession);
+                    if (systemExt != nullptr) {
+
+                        systemExt->DestroyMediaKeySessionExt(mediaKeySession);
+                    }
+                    else {
+
+                        CDMi::IMediaKeys* system = _parent.KeySystem(keySystem);
+                        if (system != nullptr) {
+
+                            system->DestroyMediaKeySession(mediaKeySession);
+                        }
+                        else {
+                            TRACE_L1("No system to handle session = %x\n", session);
+                        }
                     }
                 }
  
