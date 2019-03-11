@@ -660,6 +660,7 @@ namespace Plugin {
                     // OKe we got a buffer machanism to transfer the raw data, now create
                     // the session.
                     if ((session == nullptr) && (system->CreateMediaKeySession(
+                        keySystem,
                         licenseType,
                         initDataType.c_str(),
                         initData,
