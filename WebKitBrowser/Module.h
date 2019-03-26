@@ -5,7 +5,6 @@
 #define MODULE_NAME Plugin_WebKitBrowser
 #endif
 
-#include <core/core.h>
 #include <plugins/plugins.h>
 
 #undef EXTERNAL

@@ -6,39 +6,66 @@
 #include <memory>
 #include <syslog.h>
 
-using namespace WPEFramework;
+<<<<<<< HEAD
+#include "ClassDefinition.h"
+#include "NotifyWPEFramework.h"
+#include "Utils.h"
+#include "WhiteListedOriginDomainsList.h"
 
-static Core::NodeId GetConnectionNode() {
+using namespace WPEFramework;
+using JavaScript::ClassDefinition;
+using WebKit::WhiteListedOriginDomainsList;
+
+WKBundleRef g_Bundle;
+=======
+using namespace WPEFramework;
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
+
+static Core::NodeId GetConnectionNode()
+{
     string nodeName;
 
     Core::SystemInfo::GetEnvironment(string(_T("COMMUNICATOR_CONNECTOR")), nodeName);
 
-    return (Core::NodeId (nodeName.c_str()));
+    return (Core::NodeId(nodeName.c_str()));
 }
 
-static class PluginHost 
-{
-    private:
-        PluginHost(const PluginHost&) = delete;
-        PluginHost& operator= (const PluginHost&) = delete;
+static class PluginHost {
+private:
+    PluginHost(const PluginHost&) = delete;
+    PluginHost& operator=(const PluginHost&) = delete;
 
-    public:
-        PluginHost()
-            : _comClient(Core::ProxyType< RPC::CommunicatorClient >::Create(GetConnectionNode(), Core::ProxyType< RPC::InvokeServerType<16,2> >::Create() ) )
-        {
-        }
-        ~PluginHost()
-        {
-            TRACE_L1("Destructing injected bundle stuff!!! [%d]", __LINE__);
-            Deinitialize();
-        }
-
+<<<<<<< HEAD
+public:
+    PluginHost()
+        : _comClient(Core::ProxyType<RPC::CommunicatorClient>::Create(GetConnectionNode(), Core::ProxyType<RPC::InvokeServerType<16, 2>>::Create()))
+    {
+    }
+    ~PluginHost()
+    {
+        TRACE_L1("Destructing injected bundle stuff!!! [%d]", __LINE__);
+        Deinitialize();
+    }
+=======
     public:
         void Initialize (WebKitWebExtension* extension, GVariant* userData)
         {
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
 
-            Trace::TraceType<Trace::Information, &Core::System::MODULE_NAME>::Enable(true);
+public:
+    void Initialize(WKBundleRef bundle)
+    {
 
+<<<<<<< HEAD
+        Trace::TraceType<Trace::Information, &Core::System::MODULE_NAME>::Enable(true);
+
+        // We have something to report back, do so...
+        uint32_t result = _comClient->Open(RPC::CommunicationTimeOut);
+        if (result != Core::ERROR_NONE) {
+            TRACE(Trace::Error, (_T("Could not open connection to node %s. Error: %s"), _comClient->Source().RemoteId(), Core::NumberType<uint32_t>(result).Text()));
+        } else {
+            _comClient.Release();
+=======
             // We have something to report back, do so...
             uint32_t result = _comClient->Open(RPC::CommunicationTimeOut);
             if ( result != Core::ERROR_NONE ) { 
@@ -61,14 +88,31 @@ static class PluginHost
 
             if (whitelist)
                 addOriginAccessWhiteList(whitelist);
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
         }
 
-        void Deinitialize() 
-        {
-            if( _comClient.IsValid() == true ) {
-                _comClient.Release();
-            }
+        _bundle = bundle;
 
+<<<<<<< HEAD
+        _whiteListedOriginDomainPairs = WhiteListedOriginDomainsList::RequestFromWPEFramework(bundle);
+    }
+
+    void Deinitialize()
+    {
+        if (_comClient.IsValid() == true) {
+            _comClient.Release();
+        }
+
+        Core::Singleton::Dispose();
+    }
+
+    void WhiteList(WKBundleRef bundle)
+    {
+
+        // Whitelist origin/domain pairs for CORS, if set.
+        if (_whiteListedOriginDomainPairs) {
+            _whiteListedOriginDomainPairs->AddWhiteListToWebKit(bundle);
+=======
             g_object_unref(_scriptWorld);
             g_object_unref(_extension);
 
@@ -131,8 +175,20 @@ static class PluginHost
 
             // TODO: use "Trace" classes for different levels.
             TRACE_GLOBAL(Trace::Information, (messageString));
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
         }
+    }
 
+<<<<<<< HEAD
+private:
+    Core::ProxyType<RPC::CommunicatorClient> _comClient;
+
+    // White list for CORS.
+    std::unique_ptr<WhiteListedOriginDomainsList> _whiteListedOriginDomainPairs;
+
+    // Handle of bundle.
+    WKBundleRef _bundle;
+=======
         void addOriginAccessWhiteList(const char* whitelist)
         {
             class JSONEntry : public Core::JSON::Container {
@@ -196,23 +252,33 @@ static class PluginHost
 
         WebKitWebExtension* _extension;
         WebKitScriptWorld* _scriptWorld;
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
 
 } _wpeFrameworkClient;
 
 extern "C" {
 
-__attribute__((destructor))
-static void unload() {
+__attribute__((destructor)) static void unload()
+{
     _wpeFrameworkClient.Deinitialize();
 }
 
 // Declare module name for tracer.
 MODULE_NAME_DECLARATION(BUILD_REFERENCE)
 
+<<<<<<< HEAD
+void WKBundleInitialize(WKBundleRef bundle, WKTypeRef)
+{
+    g_Bundle = bundle;
+
+    _wpeFrameworkClient.Initialize(bundle);
+
+    WKBundleSetClient(bundle, &s_bundleClient.base);
+=======
 
 G_MODULE_EXPORT void webkit_web_extension_initialize_with_user_data(WebKitWebExtension* extension, GVariant* userData)
 {
     _wpeFrameworkClient.Initialize(extension, userData);
+>>>>>>> [WebKitBrowser] Switch to use the GLib API
 }
-
 }

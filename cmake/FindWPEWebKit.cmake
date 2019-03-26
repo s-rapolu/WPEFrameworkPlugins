@@ -9,7 +9,7 @@
 # So here we purposely left one underscore away
 
 find_package(PkgConfig)
-pkg_check_modules(PC_WPE_WEBKIT wpe-webkit)
+pkg_check_modules(PC_WPE_WEBKIT wpe-webkit-0.1)
 
 if(PC_WPE_WEBKIT_FOUND)
     if(WPE_WEBKIT_FIND_VERSION AND PC_WPE_WEBKIT_VERSION)
@@ -26,7 +26,7 @@ endif()
 if(PC_WPE_WEBKIT_FOUND)
     find_path(
         WPE_WEBKIT_INCLUDE_DIRS
-        NAMES WPE/WebKit.h
+        NAMES wpe/webkit.h
         HINTS ${PC_WPE_WEBKIT_INCLUDEDIR} ${PC_WPE_WEBKIT_INCLUDE_DIRS})
 
     set(WPE_WEBKIT_LIBRARIES )
@@ -64,7 +64,7 @@ message(STATUS "  include dirs : ${WPE_WEBKIT_INCLUDE_DIRS}")
 message(STATUS "  libs         : ${WPE_WEBKIT_LIBRARIES}")
 
 set(WPE_WEBKIT_DEFINITIONS ${PC_WPE_WEBKIT_PLUGINS_CFLAGS_OTHER})
-set(WPE_WEBKIT_INCLUDE_DIR ${WPE_WEBKIT_INCLUDE_DIRS})
+set(WPE_WEBKIT_INCLUDE_DIR ${PC_WPE_WEBKIT_INCLUDE_DIRS} ${PC_WPE_WEBKIT_INCLUDEDIR})
 set(WPE_WEBKIT_LIBRARY ${WPE_WEBKIT_LIBRARIES})
 set(WPE_WEBKIT_LIBRARY_DIRS ${PC_WPE_WEBKIT_LIBRARY_DIRS})
 

@@ -30,14 +30,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(GLIB REQUIRED)
+find_package(LibSoup REQUIRED)
 find_package(WPEWebKit REQUIRED)
+find_package(WPE REQUIRED)
 
 add_library(${MODULE_NAME} SHARED  
     Module.cpp
     WebKitBrowser.cpp
     WebKitImplementation.cpp
-    InjectedBundle/WhiteListedOriginDomainsList.cpp
-    InjectedBundle/Utils.cpp
 )
 
 set_target_properties(${MODULE_NAME} PROPERTIES
@@ -48,13 +48,17 @@ target_link_libraries(${MODULE_NAME}
     PRIVATE 
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
         ${GLIB_LIBRARIES}
-        ${WPE_WEBKIT_LIBRARIES})
+        ${LIBSOUP_LIBRARIES}
+        ${WPE_WEBKIT_LIBRARIES}
+        ${WPE_LIBRARIES})
 
 target_include_directories(${MODULE_NAME} 
     PRIVATE 
         ${WPE_WEBKIT_INCLUDE_DIRS}
         ${WPE_WEBKIT_INCLUDE_DIRS}/WPE
-        ${GLIB_INCLUDE_DIRS})
+        ${GLIB_INCLUDE_DIRS}
+        ${LIBSOUP_INCLUDE_DIRS}
+        ${WPE_INCLUDE_DIRS})
 
 install(
     TARGETS ${MODULE_NAME}

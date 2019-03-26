@@ -2,223 +2,21 @@
 
 #include "Module.h"
 
-#include <WPE/WebKit.h>
-#include <WPE/WebKit/WKCookieManagerSoup.h>
-#include <WPE/WebKit/WKGeolocationManager.h> // TODO: add ref to this header in WebKit.h?
-#include <WPE/WebKit/WKGeolocationPermissionRequest.h>
-#include <WPE/WebKit/WKGeolocationPosition.h>
-#include <WPE/WebKit/WKNotification.h>
-#include <WPE/WebKit/WKNotificationManager.h>
-#include <WPE/WebKit/WKNotificationPermissionRequest.h>
-#include <WPE/WebKit/WKNotificationProvider.h>
-#include <WPE/WebKit/WKSoupSession.h>
-#include <WPE/WebKit/WKUserMediaPermissionRequest.h>
+#include <wpe/webkit.h>
 
 #include <glib.h>
 
-#include "HTML5Notification.h"
-#include "InjectedBundle/NotifyWPEFramework.h"
-#include "InjectedBundle/Utils.h"
-#include "InjectedBundle/WhiteListedOriginDomainsList.h"
 #include "WebKitBrowser.h"
+#include "HTML5Notification.h"
 
 #include <iostream>
-
-using namespace WebKit;
 
 namespace WPEFramework {
 namespace Plugin {
 
-    static void onDidReceiveSynchronousMessageFromInjectedBundle(WKContextRef context, WKStringRef messageName,
-        WKTypeRef messageBodyObj, WKTypeRef* returnData, const void* clientInfo);
-    static void onNotificationShow(WKPageRef page, WKNotificationRef notification, const void* clientInfo);
-    static void didStartProvisionalNavigation(WKPageRef page, WKNavigationRef navigation, WKTypeRef userData, const void* clientInfo);
-    static void didFinishDocumentLoad(WKPageRef page, WKNavigationRef navigation, WKTypeRef userData, const void* clientInfo);
-    static void onFrameDisplayed(WKViewRef view, const void* clientInfo);
-    static void didSameDocumentNavigation(const OpaqueWKPage* page, const OpaqueWKNavigation* nav, unsigned int count, const void* clientInfo, const void* info);
-    static void requestClosure(const void* clientInfo);
-    static void didRequestAutomationSession(WKContextRef context, WKStringRef sessionID, const void* clientInfo);
-    static WKPageRef onAutomationSessionRequestNewPage(WKWebAutomationSessionRef session, const void* clientInfo);
-
     // -----------------------------------------------------------------------------------------------------
     // Hide all NASTY C details that come with the POC libraries !!!!!
     // -----------------------------------------------------------------------------------------------------
-    static WKPageNavigationClientV0 _handlerWebKit = {
-        { 0, nullptr },
-        // decidePolicyForNavigationAction
-        [](WKPageRef, WKNavigationActionRef, WKFramePolicyListenerRef listener, WKTypeRef, const void* customData) {
-            WKFramePolicyListenerUse(listener);
-        },
-        // decidePolicyForNavigationResponse
-        [](WKPageRef, WKNavigationResponseRef, WKFramePolicyListenerRef listener, WKTypeRef, const void*) {
-            WKFramePolicyListenerUse(listener);
-        },
-        nullptr, // decidePolicyForPluginLoad
-        didStartProvisionalNavigation,
-        nullptr, // didReceiveServerRedirectForProvisionalNavigation
-        nullptr, // didFailProvisionalNavigation
-        nullptr, // didCommitNavigation
-        nullptr, // didFinishNavigation
-        nullptr, // didFailNavigation
-        nullptr, // didFailProvisionalLoadInSubframe
-        didFinishDocumentLoad,
-        didSameDocumentNavigation, // didSameDocumentNavigation
-        nullptr, // renderingProgressDidChange
-        nullptr, // canAuthenticateAgainstProtectionSpace
-        nullptr, // didReceiveAuthenticationChallenge
-        // webProcessDidCrash
-        [](WKPageRef page, const void*) {
-            SYSLOG(Trace::Fatal, ("CRASH: WebProcess crashed, exiting..."));
-            exit(1);
-        },
-        nullptr, // copyWebCryptoMasterKey
-        nullptr, // didBeginNavigationGesture
-        nullptr, // willEndNavigationGesture
-        nullptr, // didEndNavigationGesture
-        nullptr, // didRemoveNavigationGestureSnapshot
-    };
-
-    static WKContextInjectedBundleClientV1 _handlerInjectedBundle = {
-        { 1, nullptr },
-        nullptr, // didReceiveMessageFromInjectedBundle
-        // didReceiveSynchronousMessageFromInjectedBundle
-        onDidReceiveSynchronousMessageFromInjectedBundle,
-        nullptr, // getInjectedBundleInitializationUserData
-    };
-
-    WKGeolocationProviderV0 _handlerGeolocationProvider = {
-        { 0, nullptr },
-        // startUpdating
-        [](WKGeolocationManagerRef geolocationManager, const void* clientInfo) {
-            std::cerr << "in WKGeolocationProviderV0::startUpdating" << std::endl;
-            WKGeolocationPositionRef position = WKGeolocationPositionCreate(0.0, 51.49, 4.40, 1.0);
-            WKGeolocationManagerProviderDidChangePosition(geolocationManager, position);
-        },
-        nullptr, // stopUpdating
-    };
-
-    WKPageUIClientV6 _handlerPageUI = {
-        { 6, nullptr },
-        nullptr, // createNewPage_deprecatedForUseWithV0
-        nullptr, // showPage
-        // close
-        [](const OpaqueWKPage*, const void* clientInfo) {
-            requestClosure(clientInfo);
-        },
-        nullptr, // takeFocus
-        nullptr, // focus
-        nullptr, // unfocus
-        nullptr, // runJavaScriptAlert_deprecatedForUseWithV0
-        nullptr, // runJavaScriptConfirm_deprecatedForUseWithV0
-        nullptr, // runJavaScriptPrompt_deprecatedForUseWithV0
-        nullptr, // setStatusText
-        nullptr, // mouseDidMoveOverElement_deprecatedForUseWithV0
-        nullptr, // missingPluginButtonClicked_deprecatedForUseWithV0
-        nullptr, // didNotHandleKeyEvent
-        nullptr, // didNotHandleWheelEvent
-        nullptr, // toolbarsAreVisible
-        nullptr, // setToolbarsAreVisible
-        nullptr, // menuBarIsVisible
-        nullptr, // setMenuBarIsVisible
-        nullptr, // statusBarIsVisible
-        nullptr, // setStatusBarIsVisible
-        nullptr, // isResizable
-        nullptr, // setIsResizable
-        nullptr, // getWindowFrame
-        nullptr, // setWindowFrame
-        nullptr, // runBeforeUnloadConfirmPanel
-        nullptr, // didDraw
-        nullptr, // pageDidScroll
-        nullptr, // exceededDatabaseQuota
-        nullptr, // runOpenPanel
-        // decidePolicyForGeolocationPermissionRequest
-        [](WKPageRef page, WKFrameRef frame, WKSecurityOriginRef origin, WKGeolocationPermissionRequestRef permissionRequest, const void* clientInfo) {
-            WKGeolocationPermissionRequestAllow(permissionRequest);
-        },
-        nullptr, // headerHeight
-        nullptr, // footerHeight
-        nullptr, // drawHeader
-        nullptr, // drawFooter
-        nullptr, // printFrame
-        nullptr, // runModal
-        nullptr, // unused1
-        nullptr, // saveDataToFileInDownloadsFolder
-        nullptr, // shouldInterruptJavaScript_unavailable
-        nullptr, // createNewPage_deprecatedForUseWithV1
-        nullptr, // mouseDidMoveOverElement
-        // decidePolicyForNotificationPermissionRequest
-        [](WKPageRef page, WKSecurityOriginRef origin, WKNotificationPermissionRequestRef permissionRequest, const void* clientInfo) {
-            WKNotificationPermissionRequestAllow(permissionRequest);
-        },
-        nullptr, // unavailablePluginButtonClicked_deprecatedForUseWithV1
-        nullptr, // showColorPicker
-        nullptr, // hideColorPicker
-        nullptr, // unavailablePluginButtonClicked
-        nullptr, // pinnedStateDidChange
-        nullptr, // didBeginTrackingPotentialLongMousePress
-        nullptr, // didRecognizeLongMousePress
-        nullptr, // didCancelTrackingPotentialLongMousePress
-        nullptr, // isPlayingAudioDidChange
-        // decidePolicyForUserMediaPermissionRequest
-        [](WKPageRef, WKFrameRef, WKSecurityOriginRef, WKSecurityOriginRef, WKUserMediaPermissionRequestRef permission, const void*) {
-            auto audioDevices = WKUserMediaPermissionRequestAudioDeviceUIDs(permission);
-            auto videoDevices = WKUserMediaPermissionRequestVideoDeviceUIDs(permission);
-            auto audioDevice = WKStringCreateWithUTF8CString("NO AUDIO DEVICE FOUND");
-            if (WKArrayGetSize(audioDevices) > 0)
-                audioDevice = static_cast<WKStringRef>(WKArrayGetItemAtIndex(audioDevices, 0));
-            auto videoDevice = WKStringCreateWithUTF8CString("NO VIDEO DEVICE FOUND");
-            if (WKArrayGetSize(videoDevices) > 0)
-                videoDevice = static_cast<WKStringRef>(WKArrayGetItemAtIndex(videoDevices, 0));
-            WKUserMediaPermissionRequestAllow(permission, audioDevice, videoDevice);
-        },
-        nullptr, // didClickAutoFillButton
-        nullptr, // runJavaScriptAlert
-        nullptr, // runJavaScriptConfirm
-        nullptr, // runJavaScriptPrompt
-        nullptr, // mediaSessionMetadataDidChange
-        nullptr, // createNewPage
-    };
-
-    WKNotificationProviderV0 _handlerNotificationProvider = {
-        { 0, nullptr },
-        // show
-        onNotificationShow,
-        nullptr, // cancel
-        nullptr, // didDestroyNotification
-        nullptr, // addNotificationManager
-        nullptr, // removeNotificationManager
-        nullptr, // notificationPermissions
-        nullptr, // clearNotifications
-    };
-
-    WKViewClientV0 _viewClient = {
-        { 0, nullptr },
-        // frameDisplayed
-        onFrameDisplayed,
-    };
-
-    WKContextAutomationClientV0 _handlerAutomation = {
-        { 0, nullptr },
-        // allowsRemoteAutomation
-        [](WKContextRef, const void*) -> bool {
-            return true;
-        },
-        didRequestAutomationSession,
-        // browserName
-        [](WKContextRef, const void*) -> WKStringRef {
-            return WKStringCreateWithUTF8CString("WPEWebKitBrowser");
-        },
-        // browserVersion
-        [](WKContextRef, const void*) -> WKStringRef {
-            return WKStringCreateWithUTF8CString("1.0");
-        }
-    };
-
-    WKWebAutomationsessionClientV0 _handlerAutomationSession = {
-        { 0, nullptr },
-        // requestNewPage
-        onAutomationSessionRequestNewPage
-    };
 
     /* ---------------------------------------------------------------------------------------------------
 struct CustomLoopHandler
@@ -306,7 +104,6 @@ static GSourceFuncs _handlerIntervention =
                 : Core::JSON::Container()
                 , UserAgent()
                 , URL(_T("http://www.google.com"))
-                , PageGroup(_T("WPEPageGroup"))
                 , CookieStorage()
                 , LocalStorage()
                 , Secure(false)
@@ -340,7 +137,6 @@ static GSourceFuncs _handlerIntervention =
             {
                 Add(_T("useragent"), &UserAgent);
                 Add(_T("url"), &URL);
-                Add(_T("pagegroup"), &PageGroup);
                 Add(_T("cookiestorage"), &CookieStorage);
                 Add(_T("localstorage"), &LocalStorage);
                 Add(_T("secure"), &Secure);
@@ -380,7 +176,6 @@ static GSourceFuncs _handlerIntervention =
         public:
             Core::JSON::String UserAgent;
             Core::JSON::String URL;
-            Core::JSON::String PageGroup;
             Core::JSON::String CookieStorage;
             Core::JSON::String LocalStorage;
             Core::JSON::Boolean Secure;
@@ -425,7 +220,6 @@ static GSourceFuncs _handlerIntervention =
             , _URL()
             , _dataPath()
             , _view()
-            , _page()
             , _adminLock()
             , _fps(0)
             , _loop(nullptr)
@@ -434,7 +228,7 @@ static GSourceFuncs _handlerIntervention =
             , _hidden(false)
             , _time(0)
             , _compliant(false)
-            , _automationSession(nullptr)
+            , _guid(g_dbus_generate_guid())
         {
 
             // Register an @Exit, in case we are killed, with an incorrect ref count !!
@@ -451,6 +245,8 @@ static GSourceFuncs _handlerIntervention =
         virtual ~WebKitImplementation()
         {
             Block();
+
+            g_free(_guid);
 
             if (_loop != nullptr)
                 g_main_loop_quit(_loop);
@@ -473,9 +269,7 @@ static GSourceFuncs _handlerIntervention =
                     _context,
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
-                        auto shellURL = WKURLCreateWithUTF8CString(object->_URL.c_str());
-                        WKPageLoadURL(object->_page, shellURL);
-                        WKRelease(shellURL);
+                        webkit_web_view_load_uri(object->_view, object->_URL.c_str());
                         return FALSE;
                     },
                     this);
@@ -504,7 +298,8 @@ static GSourceFuncs _handlerIntervention =
                 // Just move the state to what we would like it to be :-)
                 _state = (command == PluginHost::IStateControl::SUSPEND ? PluginHost::IStateControl::SUSPENDED : PluginHost::IStateControl::RESUMED);
                 result = Core::ERROR_NONE;
-            } else {
+            }
+            else {
                 switch (command) {
                 case PluginHost::IStateControl::SUSPEND:
                     if (_state == PluginHost::IStateControl::RESUMED) {
@@ -562,7 +357,8 @@ static GSourceFuncs _handlerIntervention =
         {
             if (hidden == true) {
                 Hide();
-            } else {
+            }
+            else {
                 Show();
             }
         }
@@ -614,11 +410,11 @@ static GSourceFuncs _handlerIntervention =
 
             _adminLock.Unlock();
         }
-        void OnLoadFinished(const string& URL)
+        void OnLoadFinished()
         {
             _adminLock.Lock();
 
-            _URL = URL;
+            string URL = Core::ToString(webkit_web_view_get_uri(_view));
 
             std::list<Exchange::IBrowser::INotification*>::iterator index(_notificationClients.begin());
 
@@ -669,18 +465,14 @@ static GSourceFuncs _handlerIntervention =
                 std::cout << "  " << line << std::endl;
             }
         }
-        void OnNotificationShown(uint64_t notificationID) const
-        {
-            WKNotificationManagerProviderDidShowNotification(_notificationManager, notificationID);
-        }
         virtual uint32_t Configure(PluginHost::IShell* service)
         {
             _dataPath = service->DataPath();
             _config.FromString(service->ConfigLine());
 
-            bool environmentOverride(WebKitBrowser::EnvironmentOverride(_config.EnvironmentOverride.Value()));
+            bool environmentOverride (WebKitBrowser::EnvironmentOverride(_config.EnvironmentOverride.Value()));
 
-            if ((environmentOverride == false) || (Core::SystemInfo::GetEnvironment(_T("WPE_WEBKIT_URL"), _URL) == false)) {
+            if ( (environmentOverride == false) || (Core::SystemInfo::GetEnvironment(_T("WPE_WEBKIT_URL"), _URL) == false) ) {
                 _URL = _config.URL.Value();
             }
 
@@ -688,9 +480,10 @@ static GSourceFuncs _handlerIntervention =
             Core::SystemInfo::SetEnvironment(_T("HOME"), service->PersistentPath());
 
             if (_config.ClientIdentifier.IsSet() == true) {
-                string value(service->Callsign() + ',' + _config.ClientIdentifier.Value());
+                string value (service->Callsign() + ',' + _config.ClientIdentifier.Value());
                 Core::SystemInfo::SetEnvironment(_T("CLIENT_IDENTIFIER"), value, !environmentOverride);
-            } else {
+            }
+            else {
                 Core::SystemInfo::SetEnvironment(_T("CLIENT_IDENTIFIER"), service->Callsign(), !environmentOverride);
             }
 
@@ -715,7 +508,7 @@ static GSourceFuncs _handlerIntervention =
             else
                 Core::SystemInfo::SetEnvironment(_T("WPE_SHELL_MEDIA_DISK_CACHE_PATH"), service->PersistentPath(), !environmentOverride);
 
-            // Disk Cache
+		// Disk Cache
             if (_config.DiskCache.Value().empty() == false)
                 Core::SystemInfo::SetEnvironment(_T("WPE_DISK_CACHE_SIZE"), _config.DiskCache.Value(), !environmentOverride);
 
@@ -731,8 +524,8 @@ static GSourceFuncs _handlerIntervention =
                 Core::SystemInfo::SetEnvironment(_T("CAIRO_GL_COMPOSITOR"), _config.Compositor.Value(), !environmentOverride);
 
             // WebInspector
-            if (_config.Inspector.Value().empty() == false) {
-                if (_config.Automation.Value())
+            if (_config.Inspector.Value().empty() == false){
+                if(_config.Automation.Value())
                     Core::SystemInfo::SetEnvironment(_T("WEBKIT_INSPECTOR_SERVER"), _config.Inspector.Value(), !environmentOverride);
                 else
                     Core::SystemInfo::SetEnvironment(_T("WEBKIT_LEGACY_INSPECTOR_SERVER"), _config.Inspector.Value(), !environmentOverride);
@@ -825,24 +618,6 @@ static GSourceFuncs _handlerIntervention =
             _fps = fps;
         }
 
-        string GetWhiteListJsonString() const
-        {
-            return _config.Whitelist.Value();
-        }
-
-        void OnRequestAutomationSession(WKContextRef context, WKStringRef sessionID)
-        {
-            _automationSession = WKWebAutomationSessionCreate(sessionID);
-            _handlerAutomationSession.base.clientInfo = static_cast<void*>(this);
-            WKWebAutomationSessionSetClient(_automationSession, &_handlerAutomationSession.base);
-            WKContextSetAutomationSession(context, _automationSession);
-        }
-
-        WKPageRef GetPage() const
-        {
-            return _page;
-        }
-
         BEGIN_INTERFACE_MAP(WebKitImplementation)
         INTERFACE_ENTRY(Exchange::IBrowser)
         INTERFACE_ENTRY(PluginHost::IStateControl)
@@ -858,7 +633,9 @@ static GSourceFuncs _handlerIntervention =
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
 
-                        WKViewSetViewState(object->_view, (object->_state == PluginHost::IStateControl::RESUMED ? kWKViewStateIsInWindow : 0));
+                        auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(object->_view));
+                        wpe_view_backend_remove_activity_state(backend, wpe_view_activity_state_visible | wpe_view_activity_state_focused);
+
                         object->Hidden(true);
 
                         TRACE_L1("Internal Hide Notification took %d mS.", static_cast<uint32_t>(Core::Time::Now().Ticks() - object->_time));
@@ -877,7 +654,9 @@ static GSourceFuncs _handlerIntervention =
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
 
-                        WKViewSetViewState(object->_view, (object->_state == PluginHost::IStateControl::RESUMED ? kWKViewStateIsInWindow : 0) | kWKViewStateIsVisible);
+                        auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(object->_view));
+                        wpe_view_backend_add_activity_state(backend, wpe_view_activity_state_visible | wpe_view_activity_state_focused);
+
                         object->Hidden(false);
 
                         TRACE_L1("Internal Show Notification took %d mS.", static_cast<uint32_t>(Core::Time::Now().Ticks() - object->_time));
@@ -891,14 +670,17 @@ static GSourceFuncs _handlerIntervention =
         {
             if (_context == nullptr) {
                 _state = PluginHost::IStateControl::SUSPENDED;
-            } else {
+            }
+            else {
                 _time = Core::Time::Now().Ticks();
                 g_main_context_invoke(
                     _context,
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
 
-                        WKViewSetViewState(object->_view, (object->_hidden ? 0 : kWKViewStateIsVisible));
+                        auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(object->_view));
+                        wpe_view_backend_remove_activity_state(backend, wpe_view_activity_state_in_window | wpe_view_activity_state_focused);
+
                         object->OnStateChange(PluginHost::IStateControl::SUSPENDED);
 
                         TRACE_L1("Internal Suspend Notification took %d mS.", static_cast<uint32_t>(Core::Time::Now().Ticks() - object->_time));
@@ -912,7 +694,8 @@ static GSourceFuncs _handlerIntervention =
         {
             if (_context == nullptr) {
                 _state = PluginHost::IStateControl::RESUMED;
-            } else {
+            }
+            else {
                 _time = Core::Time::Now().Ticks();
 
                 g_main_context_invoke(
@@ -920,7 +703,12 @@ static GSourceFuncs _handlerIntervention =
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
 
-                        WKViewSetViewState(object->_view, (object->_hidden ? 0 : kWKViewStateIsVisible) | kWKViewStateIsInWindow);
+                        auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(object->_view));
+                        uint32_t state = wpe_view_activity_state_in_window;
+                        if (!object->_hidden)
+                            state |= wpe_view_activity_state_focused;
+                        wpe_view_backend_add_activity_state(backend, state);
+
                         object->OnStateChange(PluginHost::IStateControl::RESUMED);
 
                         TRACE_L1("Internal Resume Notification took %d mS.", static_cast<uint32_t>(Core::Time::Now().Ticks() - object->_time));
@@ -930,169 +718,252 @@ static GSourceFuncs _handlerIntervention =
                     this);
             }
         }
+
+        static void initializeWebExtensionsCallback(WebKitWebContext* context, WebKitImplementation* browser)
+        {
+            webkit_web_context_set_web_extensions_directory(context, browser->_dataPath.c_str());
+            GVariant* data = g_variant_new("(sms)", browser->_guid, !browser->_config.Whitelist.Value().empty() ? browser->_config.Whitelist.Value().c_str() : nullptr);
+            webkit_web_context_set_web_extensions_initialization_user_data(context, data);
+        }
+
+        static gboolean geolocationManagerStartCallback(WebKitGeolocationManager* manager)
+        {
+            std::cerr << "in WebKitGeolocationManager::start" << std::endl;
+            auto* position = webkit_geolocation_position_new(51.49, 4.40, 1.0);
+            webkit_geolocation_manager_update_position(manager, position);
+            webkit_geolocation_position_free(position);
+            return TRUE;
+        }
+
+        static void wpeNotifyWPEFrameworkMessageReceivedCallback(WebKitUserContentManager*, WebKitJavascriptResult* message, WebKitImplementation* browser)
+        {
+            JSCValue* args = webkit_javascript_result_get_js_value(message);
+            JSCValue* arrayLengthValue = jsc_value_object_get_property(args, "length");
+            int arrayLength = jsc_value_to_int32(arrayLengthValue);
+            g_object_unref(arrayLengthValue);
+
+            std::vector<string> messageStrings;
+            for (int i = 0; i < arrayLength; ++i) {
+                JSCValue* itemValue = jsc_value_object_get_property_at_index(args, i);
+                char* itemStr = jsc_value_to_string(itemValue);
+                g_object_unref(itemValue);
+                messageStrings.push_back(Core::ToString(itemStr));
+                g_free(itemStr);
+            }
+
+            browser->OnJavaScript(messageStrings);
+        }
+
+        static gboolean decidePolicyCallback(WebKitWebView*, WebKitPolicyDecision* decision, WebKitPolicyDecisionType)
+        {
+            webkit_policy_decision_use(decision);
+            return TRUE;
+        }
+
+        static void uriChangedCallback(WebKitWebView* webView, GParamSpec*, WebKitImplementation* browser)
+        {
+            browser->OnURLChanged(Core::ToString(webkit_web_view_get_uri(webView)));
+        }
+
+        static void loadChangedCallback(WebKitWebView* webView, WebKitLoadEvent loadEvent, WebKitImplementation* browser)
+        {
+            if (loadEvent == WEBKIT_LOAD_FINISHED)
+                browser->OnLoadFinished();
+        }
+
+        static void webProcessTerminatedCallback(WebKitWebView* webView, WebKitWebProcessTerminationReason reason)
+        {
+            switch (reason) {
+            case WEBKIT_WEB_PROCESS_CRASHED:
+                SYSLOG(Trace::Fatal, ("CRASH: WebProcess crashed: exiting ..."));
+                break;
+            case WEBKIT_WEB_PROCESS_EXCEEDED_MEMORY_LIMIT:
+                SYSLOG(Trace::Fatal, ("CRASH: WebProcess terminated due to memory limit: exiting ..."));
+                break;
+            }
+            exit(1);
+        }
+
+        static void closeCallback(WebKitWebView*, WebKitImplementation* browser)
+        {
+            browser->NotifyClosure();
+        }
+
+        static gboolean decidePermissionCallback(WebKitWebView*, WebKitPermissionRequest* permissionRequest)
+        {
+            webkit_permission_request_allow(permissionRequest);
+            return TRUE;
+        }
+
+        static gboolean showNotificationCallback(WebKitWebView*, WebKitNotification* notification, WebKitImplementation* browser)
+        {
+            TRACE_GLOBAL(HTML5Notification, (_T("%s - %s"), webkit_notification_get_title(notification), webkit_notification_get_body(notification)));
+
+            return FALSE;
+        }
+
+        static WebKitWebView* createWebViewForAutomationCallback(WebKitAutomationSession* session, WebKitImplementation* browser)
+        {
+            return browser->_view;
+        }
+
+        static void automationStartedCallback(WebKitWebContext* context, WebKitAutomationSession* session, WebKitImplementation* browser)
+        {
+            WebKitApplicationInfo *info = webkit_application_info_new();
+            webkit_application_info_set_name(info, "WPEWebKitBrowser");
+            webkit_application_info_set_version(info, 1, 0, 0);
+            webkit_automation_session_set_application_info(session, info);
+            webkit_application_info_unref(info);
+
+            g_signal_connect(session, "create-web-view", reinterpret_cast<GCallback>(createWebViewForAutomationCallback), browser);
+        }
+
         virtual uint32_t Worker()
         {
             _context = g_main_context_new();
             _loop = g_main_loop_new(_context, FALSE);
             g_main_context_push_thread_default(_context);
 
-            auto contextConfiguration = WKContextConfigurationCreate();
+            bool automationEnabled = _config.Automation.Value();
+
+            WebKitWebContext* context;
+            if (automationEnabled) {
+                context = webkit_web_context_new_ephemeral();
+                webkit_web_context_set_automation_allowed(context, TRUE);
+                g_signal_connect(context, "automation-started", reinterpret_cast<GCallback>(automationStartedCallback), this);
+            } else {
+                gchar* wpeStoragePath;
+                if (_config.LocalStorage.IsSet() == true && _config.LocalStorage.Value().empty() == false)
+                    wpeStoragePath = g_build_filename(_config.LocalStorage.Value().c_str(), "wpe", "local-storage", nullptr);
+                else
+                    wpeStoragePath = g_build_filename(g_get_user_cache_dir(), "wpe", "local-storage", nullptr);
+                g_mkdir_with_parents(wpeStoragePath, 0700);
+
+                gchar* wpeDiskCachePath = g_build_filename(g_get_user_cache_dir(), "wpe", "disk-cache", nullptr);
+                g_mkdir_with_parents(wpeDiskCachePath, 0700);
+
+                auto* websiteDataManager = webkit_website_data_manager_new("local-storage-directory", wpeStoragePath, "disk-cache-directory", wpeDiskCachePath, nullptr);
+                g_free(wpeStoragePath);
+                g_free(wpeDiskCachePath);
+
+                context = webkit_web_context_new_with_website_data_manager(websiteDataManager);
+                g_object_unref(websiteDataManager);
+            }
 
             if (_config.InjectedBundle.Value().empty() == false) {
                 // Set up injected bundle. Will be loaded once WPEWebProcess is started.
-                string injectedBundlePath = _dataPath + _config.InjectedBundle.Value();
-                WKStringRef injectedBundlePathString = WKStringCreateWithUTF8CString(injectedBundlePath.c_str());
-                WKContextConfigurationSetInjectedBundlePath(contextConfiguration, injectedBundlePathString);
-                WKRelease(injectedBundlePathString);
+                g_signal_connect(context, "initialize-web-extensions", G_CALLBACK(initializeWebExtensionsCallback), this);
             }
 
-            gchar* wpeStoragePath;
-            if (_config.LocalStorage.IsSet() == true && _config.LocalStorage.Value().empty() == false)
-                wpeStoragePath = g_build_filename(_config.LocalStorage.Value().c_str(), "wpe", "local-storage", nullptr);
-            else
-                wpeStoragePath = g_build_filename(g_get_user_cache_dir(), "wpe", "local-storage", nullptr);
+            if (!webkit_web_context_is_ephemeral(context)) {
+                gchar* cookieDatabasePath;
+                if (_config.CookieStorage.IsSet() == true && _config.CookieStorage.Value().empty() == false)
+                    cookieDatabasePath = g_build_filename(_config.CookieStorage.Value().c_str(), "cookies.db", nullptr);
+                else
+                    cookieDatabasePath = g_build_filename(g_get_user_cache_dir(), "cookies.db", nullptr);
 
-            g_mkdir_with_parents(wpeStoragePath, 0700);
-            auto storageDirectory = WKStringCreateWithUTF8CString(wpeStoragePath);
-            g_free(wpeStoragePath);
-            WKContextConfigurationSetLocalStorageDirectory(contextConfiguration, storageDirectory);
+                auto* cookieManager = webkit_web_context_get_cookie_manager(context);
+                webkit_cookie_manager_set_persistent_storage(cookieManager, cookieDatabasePath, WEBKIT_COOKIE_PERSISTENT_STORAGE_SQLITE);
+            }
 
-            gchar* wpeDiskCachePath = g_build_filename(g_get_user_cache_dir(), "wpe", "disk-cache", nullptr);
-            g_mkdir_with_parents(wpeDiskCachePath, 0700);
-            auto diskCacheDirectory = WKStringCreateWithUTF8CString(wpeDiskCachePath);
-            g_free(wpeDiskCachePath);
-            WKContextConfigurationSetDiskCacheDirectory(contextConfiguration, diskCacheDirectory);
+            if (!_config.CertificateCheck)
+                webkit_web_context_set_tls_errors_policy(context, WEBKIT_TLS_ERRORS_POLICY_IGNORE);
 
-            WKContextRef context = WKContextCreateWithConfiguration(contextConfiguration);
-            WKSoupSessionSetIgnoreTLSErrors(context, !_config.CertificateCheck);
-
-            WKMutableArrayRef languages = WKMutableArrayCreate();
+            auto* languages = static_cast<char**>(g_new0(char*, _config.Languages.Length() + 1));
             Core::JSON::ArrayType<Core::JSON::String>::Iterator index(_config.Languages.Elements());
 
-            while (index.Next() == true) {
-                WKStringRef itemString = WKStringCreateWithUTF8CString(index.Current().Value().c_str());
-                WKArrayAppendItem(languages, itemString);
-                WKRelease(itemString);
-            }
+            for (unsigned i = 0; index.Next(); ++i)
+                languages[i] = g_strdup(index.Current().Value().c_str());
 
-            WKSoupSessionSetPreferredLanguages(context, languages);
-            WKRelease(contextConfiguration);
-            WKRelease(languages);
+            webkit_web_context_set_preferred_languages(context, languages);
+            g_strfreev(languages);
 
-            WKGeolocationManagerRef geolocationManager = WKContextGetGeolocationManager(context);
-            WKGeolocationManagerSetProvider(geolocationManager, &_handlerGeolocationProvider.base);
+            auto* geolocationManager = webkit_web_context_get_geolocation_manager(context);
+            g_signal_connect(geolocationManager, "start", reinterpret_cast<GCallback>(geolocationManagerStartCallback), nullptr);
 
-            _notificationManager = WKContextGetNotificationManager(context);
-            _handlerNotificationProvider.base.clientInfo = static_cast<void*>(this);
-            WKNotificationManagerSetProvider(_notificationManager, &_handlerNotificationProvider.base);
-
-            auto pageGroupIdentifier = WKStringCreateWithUTF8CString(_config.PageGroup.Value().c_str());
-            auto pageGroup = WKPageGroupCreateWithIdentifier(pageGroupIdentifier);
-            WKRelease(pageGroupIdentifier);
-
-            auto preferences = WKPreferencesCreate();
-
-            // Allow mixed content.
-            bool allowMixedContent = _config.Secure.Value();
-            WKPreferencesSetAllowRunningOfInsecureContent(preferences, !allowMixedContent);
-            WKPreferencesSetAllowDisplayOfInsecureContent(preferences, !allowMixedContent);
-
-            // WebSecurity
-            WKPreferencesSetWebSecurityEnabled(preferences, allowMixedContent);
-
-            // Turn off log message to stdout.
-            WKPreferencesSetLogsPageMessagesToSystemConsoleEnabled(preferences, false);
-
-            // Turn on gamepads.
-            WKPreferencesSetGamepadsEnabled(preferences, true);
-
-            // Turn on fullscreen API.
-            WKPreferencesSetFullScreenEnabled(preferences, true);
-
-            // Turn on/off allowScriptWindowClose
-            WKPreferencesSetAllowScriptsToCloseWindow(preferences, _config.AllowWindowClose.Value());
-
-            // Turn on/off non composited WebGL
-            WKPreferencesSetNonCompositedWebGLEnabled(preferences, _config.NonCompositedWebGLEnabled.Value());
-
-            //Turn on/off WebGL
-            WKPreferencesSetWebGLEnabled(preferences, _config.WebGLEnabled.Value());
-
-            WKPageGroupSetPreferences(pageGroup, preferences);
-
-            auto pageConfiguration = WKPageConfigurationCreate();
-            WKPageConfigurationSetContext(pageConfiguration, context);
-            WKPageConfigurationSetPageGroup(pageConfiguration, pageGroup);
-
-            gchar* cookieDatabasePath;
-
-            if (_config.CookieStorage.IsSet() == true && _config.CookieStorage.Value().empty() == false)
-                cookieDatabasePath = g_build_filename(_config.CookieStorage.Value().c_str(), "cookies.db", nullptr);
-            else
-                cookieDatabasePath = g_build_filename(g_get_user_cache_dir(), "cookies.db", nullptr);
-
-            auto path = WKStringCreateWithUTF8CString(cookieDatabasePath);
-            g_free(cookieDatabasePath);
-            auto cookieManager = WKContextGetCookieManager(context);
-            WKCookieManagerSetCookiePersistentStorage(cookieManager, path, kWKCookieStorageTypeSQLite);
-
-            _view = WKViewCreate(pageConfiguration);
-            if (_config.FPS.Value() == true) {
-                _viewClient.base.clientInfo = static_cast<void*>(this);
-                WKViewSetViewClient(_view, &_viewClient.base);
-            }
-
-            //_page = WKRetain(WKViewGetPage(_view));
-            _page = WKViewGetPage(_view);
-
-            if (_config.Transparent.Value() == true)
-                WKPageSetDrawsBackground(_page, false);
-
-            // Register handlers for page navigation and message from injected bundle.
-            _handlerWebKit.base.clientInfo = static_cast<void*>(this);
-            WKPageSetPageNavigationClient(_page, &_handlerWebKit.base);
-
-            _handlerInjectedBundle.base.clientInfo = static_cast<void*>(this);
-            WKContextSetInjectedBundleClient(context, &_handlerInjectedBundle.base);
-
-            WKPageSetProxies(_page, nullptr);
-
-            WKPageSetCustomBackingScaleFactor(_page, _config.ScaleFactor.Value());
-
-            if (_config.Automation.Value()) {
-                _handlerAutomation.base.clientInfo = static_cast<void*>(this);
-                WKContextSetAutomationClient(context, &_handlerAutomation.base);
-            }
-
-            WKPageSetPageUIClient(_page, &_handlerPageUI.base);
+            gboolean secure = _config.Secure.Value();
+            auto* preferences = webkit_settings_new_with_settings(
+                "enable-web-security", secure,
+                "allow-running-of-insecure-content", !secure,
+                "allow-display-of-insecure-content", !secure,
+                "javascript-can-close-window", _config.AllowWindowClose.Value(),
+                "enable-webgl", _config.WebGLEnabled.Value(),
+                "enable-non-composited-webgl", _config.NonCompositedWebGLEnabled.Value(),
+                nullptr);
 
             if (_config.UserAgent.IsSet() == true && _config.UserAgent.Value().empty() == false)
-                WKPageSetCustomUserAgent(_page, WKStringCreateWithUTF8CString(_config.UserAgent.Value().c_str()));
+                webkit_settings_set_user_agent(preferences, _config.UserAgent.Value().c_str());
+
+            _view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW,
+                "backend", webkit_web_view_backend_new(wpe_view_backend_create(), nullptr, nullptr),
+                "web-context", context,
+                "settings", preferences,
+                "is-controlled-by-automation", automationEnabled,
+                nullptr));
+            g_object_unref(context);
+            g_object_unref(preferences);
+
+            if (_config.Transparent.Value() == true) {
+                WebKitColor transparent = { 0, 0, 0, 0 };
+                webkit_web_view_set_background_color(_view, &transparent);
+            }
+
+            webkit_web_view_set_custom_device_scale_factor(_view, _config.ScaleFactor.Value());
+
+            unsigned frameDisplayedCallbackID = 0;
+            if (_config.FPS.Value() == true) {
+                frameDisplayedCallbackID = webkit_web_view_add_frame_displayed_callback(_view, [](WebKitWebView*, gpointer userData) {
+                    static unsigned s_frameCount = 0;
+                    static gint64 lastDumpTime = g_get_monotonic_time();
+
+                    ++s_frameCount;
+                    gint64 time = g_get_monotonic_time();
+                    if (time - lastDumpTime >= G_USEC_PER_SEC) {
+                        auto* browser = static_cast<WebKitImplementation*>(userData);
+                        browser->SetFPS(s_frameCount * G_USEC_PER_SEC * 1.0 / (time - lastDumpTime));
+                        s_frameCount = 0;
+                        lastDumpTime = time;
+                    }
+                }, this, nullptr);
+            }
+
+            auto* userContentManager = webkit_web_view_get_user_content_manager(_view);
+            webkit_user_content_manager_register_script_message_handler_in_world(userContentManager, "wpeNotifyWPEFramework", _guid);
+            g_signal_connect(userContentManager, "script-message-received::wpeNotifyWPEFramework",
+                reinterpret_cast<GCallback>(wpeNotifyWPEFrameworkMessageReceivedCallback), this);
+
+            g_signal_connect(_view, "decide-policy", reinterpret_cast<GCallback>(decidePolicyCallback), nullptr);
+            g_signal_connect(_view, "notify::uri", reinterpret_cast<GCallback>(uriChangedCallback), this);
+            g_signal_connect(_view, "load-changed", reinterpret_cast<GCallback>(loadChangedCallback), this);
+            g_signal_connect(_view, "web-process-terminated", reinterpret_cast<GCallback>(webProcessTerminatedCallback), nullptr);
+            g_signal_connect(_view, "close", reinterpret_cast<GCallback>(closeCallback), this);
+            g_signal_connect(_view, "permission-request", reinterpret_cast<GCallback>(decidePermissionCallback), nullptr);
+            g_signal_connect(_view, "show-notification", reinterpret_cast<GCallback>(showNotificationCallback), this);
 
             SetURL(_URL);
 
             // Move into the correct state, as requested
+            auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(_view));
             _adminLock.Lock();
             if ((_state == PluginHost::IStateControl::SUSPENDED) || (_state == PluginHost::IStateControl::UNINITIALIZED)) {
                 _state = PluginHost::IStateControl::UNINITIALIZED;
-                Suspend();
-            } else {
+                wpe_view_backend_add_activity_state(backend, wpe_view_activity_state_visible);
+                OnStateChange(PluginHost::IStateControl::SUSPENDED);
+            }
+            else {
                 _state = PluginHost::IStateControl::UNINITIALIZED;
+                wpe_view_backend_add_activity_state(backend, wpe_view_activity_state_visible | wpe_view_activity_state_focused | wpe_view_activity_state_in_window);
                 OnStateChange(PluginHost::IStateControl::RESUMED);
             }
             _adminLock.Unlock();
 
             g_main_loop_run(_loop);
 
-            //WKRelease(_page);
-            if (_automationSession)
-                WKRelease(_automationSession);
-            WKRelease(_view);
-            WKRelease(pageConfiguration);
-            WKRelease(pageGroup);
-            WKRelease(context);
-            WKRelease(preferences);
+            if (frameDisplayedCallbackID)
+                webkit_web_view_remove_frame_displayed_callback(_view, frameDisplayedCallbackID);
+            webkit_user_content_manager_unregister_script_message_handler_in_world(userContentManager, "wpeNotifyWPEFramework", _guid);
 
+            g_clear_object(&_view);
             g_main_context_pop_thread_default(_context);
             g_main_loop_unref(_loop);
             g_main_context_unref(_context);
@@ -1100,162 +971,26 @@ static GSourceFuncs _handlerIntervention =
             return Core::infinite;
         }
 
-        inline void ParseWhiteListedOriginDomainPairs();
-
     private:
         Config _config;
         string _URL;
         string _dataPath;
 
-        WKViewRef _view;
-        WKPageRef _page;
+        WebKitWebView* _view;
         Core::CriticalSection _adminLock;
         uint32_t _fps;
-        WKNotificationManagerRef _notificationManager;
         GMainLoop* _loop;
         GMainContext* _context;
-        std::unique_ptr<WhiteListedOriginDomainsList> WhiteListedOriginDomainPairs;
         std::list<Exchange::IBrowser::INotification*> _notificationClients;
         std::list<PluginHost::IStateControl::INotification*> _stateControlClients;
         PluginHost::IStateControl::state _state;
         bool _hidden;
         uint64_t _time;
         bool _compliant;
-        WKWebAutomationSessionRef _automationSession;
+        char* _guid;
     };
 
     SERVICE_REGISTRATION(WebKitImplementation, 1, 0);
-
-    // Handles synchronous messages from injected bundle.
-    /* static */ void onDidReceiveSynchronousMessageFromInjectedBundle(WKContextRef context, WKStringRef messageName,
-        WKTypeRef messageBodyObj, WKTypeRef* returnData, const void* clientInfo)
-    {
-        const WebKitImplementation* browser = static_cast<const WebKitImplementation*>(clientInfo);
-
-        string name = Utils::WKStringToString(messageName);
-
-        // Depending on message name, select action.
-        if (name == JavaScript::Functions::NotifyWPEFramework::GetMessageName()) {
-            // Message contains strings from custom JS handler "NotifyWebbridge".
-            WKArrayRef messageLines = static_cast<WKArrayRef>(messageBodyObj);
-
-            std::vector<string> messageStrings = Utils::ConvertWKArrayToStringVector(messageLines);
-            browser->OnJavaScript(messageStrings);
-        } else if (name == WhiteListedOriginDomainsList::GetMessageName()) {
-            std::string utf8Json = Core::ToString(browser->GetWhiteListJsonString().c_str());
-            *returnData = WKStringCreateWithUTF8CString(utf8Json.c_str());
-        } else {
-            // Unexpected message name.
-            std::cerr << "WebBridge received synchronous message (" << name << "), but didn't process it." << std::endl;
-        }
-    }
-
-    /* static */ void didStartProvisionalNavigation(WKPageRef page, WKNavigationRef navigation, WKTypeRef userData, const void* clientInfo)
-    {
-        WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-
-        WKURLRef urlRef = WKPageCopyActiveURL(page);
-        WKStringRef urlStringRef = WKURLCopyString(urlRef);
-
-        string url = WebKit::Utils::WKStringToString(urlStringRef);
-
-        browser->OnURLChanged(url);
-
-        WKRelease(urlRef);
-        WKRelease(urlStringRef);
-    }
-
-    /* static */ void didSameDocumentNavigation(const OpaqueWKPage* page, const OpaqueWKNavigation* nav, WKSameDocumentNavigationType type, const void* clientInfo, const void* info)
-    {
-        if (type == kWKSameDocumentNavigationAnchorNavigation) {
-            WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(info));
-
-            WKURLRef urlRef = WKPageCopyActiveURL(page);
-            WKStringRef urlStringRef = WKURLCopyString(urlRef);
-
-            string url = WebKit::Utils::WKStringToString(urlStringRef);
-
-            browser->OnURLChanged(url);
-
-            WKRelease(urlRef);
-            WKRelease(urlStringRef);
-        }
-    }
-
-    /* static */ void didFinishDocumentLoad(WKPageRef page, WKNavigationRef navigation, WKTypeRef userData, const void* clientInfo)
-    {
-
-        WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-
-        WKURLRef urlRef = WKPageCopyActiveURL(page);
-        WKStringRef urlStringRef = WKURLCopyString(urlRef);
-
-        string url = WebKit::Utils::WKStringToString(urlStringRef);
-
-        browser->OnLoadFinished(url);
-
-        WKRelease(urlRef);
-        WKRelease(urlStringRef);
-    }
-
-    /* static */ void requestClosure(const void* clientInfo)
-    {
-        // WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-        // TODO: @Igalia, make sure the clientInfo is actually holding the correct clientINfo, currently it is nullptr. For
-        // now we use the Singleton, this is fine as long as there is only 1 instance (in process) or it is always fine if we
-        // are running out-of-process..
-        WebKitImplementation* realBrowser = static_cast<WebKitImplementation*>(implementation);
-        realBrowser->NotifyClosure();
-    }
-
-    /* static */ void onNotificationShow(WKPageRef page, WKNotificationRef notification, const void* clientInfo)
-    {
-        const WebKitImplementation* browser = static_cast<const WebKitImplementation*>(clientInfo);
-
-        WKStringRef titleRef = WKNotificationCopyTitle(notification);
-        WKStringRef bodyRef = WKNotificationCopyBody(notification);
-
-        string title = WebKit::Utils::WKStringToString(titleRef);
-        string body = WebKit::Utils::WKStringToString(bodyRef);
-
-        TRACE_GLOBAL(HTML5Notification, (_T("%s - %s"), title.c_str(), body.c_str()));
-
-        // Tell page we've "shown" the notification.
-        uint64_t notificationID = WKNotificationGetID(notification);
-        browser->OnNotificationShown(notificationID);
-
-        WKRelease(bodyRef);
-        WKRelease(titleRef);
-    }
-
-    /* static */ void onFrameDisplayed(WKViewRef view, const void* clientInfo)
-    {
-        WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-
-        static unsigned s_frameCount = 0;
-        static gint64 lastDumpTime = g_get_monotonic_time();
-
-        ++s_frameCount;
-        gint64 time = g_get_monotonic_time();
-        if (time - lastDumpTime >= G_USEC_PER_SEC) {
-            browser->SetFPS(s_frameCount * G_USEC_PER_SEC * 1.0 / (time - lastDumpTime));
-            s_frameCount = 0;
-            lastDumpTime = time;
-        }
-    }
-
-    /* static */ void didRequestAutomationSession(WKContextRef context, WKStringRef sessionID, const void* clientInfo)
-    {
-        WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-        browser->OnRequestAutomationSession(context, sessionID);
-    }
-
-    /* static */ WKPageRef onAutomationSessionRequestNewPage(WKWebAutomationSessionRef, const void* clientInfo)
-    {
-        WebKitImplementation* browser = const_cast<WebKitImplementation*>(static_cast<const WebKitImplementation*>(clientInfo));
-        return browser->GetPage();
-    }
-
 } // namespace Plugin
 
 namespace WebKitBrowser {
@@ -1290,7 +1025,8 @@ namespace WebKitBrowser {
             if (pid != 0) {
                 _main = Core::ProcessInfo(pid);
                 _startTime = Core::Time::Now().Ticks() + (TYPICAL_STARTUP_TIME * 1000000);
-            } else {
+            }
+            else {
                 _startTime = 0;
             }
         }
