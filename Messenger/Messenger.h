@@ -138,6 +138,8 @@ namespace Plugin {
         }
 
     private:
+        string GenerateRoomId(const string& roomName, const string& userName);
+
         // JSON-RPC
         void RegisterAll();
         void UnregisterAll();
