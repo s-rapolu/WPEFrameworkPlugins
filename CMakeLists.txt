@@ -185,6 +185,7 @@ endif()
 
 if(PLUGIN_SPARK)
     add_subdirectory(Spark)
+endif()
 
 if(PLUGIN_MESSENGER)
     add_subdirectory(Messenger)

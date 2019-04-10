@@ -2,70 +2,40 @@
 
 #include "Module.h"
 #include <interfaces/IMessenger.h>
-#include <set>
+#include <interfaces/json/JsonData_Messenger.h>
+#include <map>
+#include <functional>
 
 namespace WPEFramework {
 
 namespace Plugin {
 
     class Messenger : public PluginHost::IPlugin
-                    , public PluginHost::IWeb
-                    , public Exchange::IRoomAdministrator::INotification {
+                    , public Exchange::IRoomAdministrator::INotification
+                    , public PluginHost::JSONRPC {
     public:
         Messenger(const Messenger&) = delete;
         Messenger& operator=(const Messenger&) = delete;
 
         Messenger()
             : _pid(0)
-            , _skipUrl(0)
             , _service(nullptr)
             , _roomAdmin(nullptr)
             , _rooms()
-            , _joinedRooms()
             , _adminLock()
-            , _joinedRoomsLock()
-        { /* empty */ }
+        {
+            RegisterAll();
+        }
 
-        class RoomsData : public Core::JSON::Container {
-        public:
-            RoomsData(const RoomsData&) = delete;
-            RoomsData& operator=(const RoomsData&) = delete;
-
-            RoomsData()
-                : Rooms()
-            {
-                Add(_T("rooms"), &Rooms);
-            }
-
-            Core::JSON::ArrayType<Core::JSON::String> Rooms;
-        }; // class RoomsData
-
-        class RoomMembersData : public Core::JSON::Container {
-        public:
-            RoomMembersData(const RoomMembersData&) = delete;
-            RoomMembersData& operator=(const RoomMembersData&) = delete;
-
-            RoomMembersData()
-                : RoomMembers()
-            {
-                Add(_T("members"), &RoomMembers);
-            }
-
-            Core::JSON::ArrayType<Core::JSON::String> RoomMembers;
-        }; // class RoomMembersData
+        ~Messenger()
+        {
+            UnregisterAll();
+        }
 
         // IPlugin methods
         virtual const string Initialize(PluginHost::IShell* service) override;
         virtual void Deinitialize(PluginHost::IShell* service) override;
         virtual string Information() const override  { return { }; }
-
-        // IWeb methods
-        virtual void Inbound(Web::Request& request) override;
-        virtual Core::ProxyType<Web::Response> Process(const Web::Request& request) override;
-
-        // IMessenger::INotification methods
-        void Created(const string& roomId) override { RoomCreatedHandler(roomId); }
-        void Destroyed(const string& roomId) override { RoomDestroyedHandler(roomId); }
 
         // Notification handling
         class MsgNotification : public Exchange::IRoomAdministrator::IRoom::IMsgNotification {
@@ -73,17 +43,16 @@ namespace Plugin {
             MsgNotification(const MsgNotification&) = delete;
             MsgNotification& operator=(const MsgNotification&) = delete;
 
-            MsgNotification(Messenger* messenger, const string& roomId, const string& userId)
+            MsgNotification(Messenger* messenger, const string& roomId)
                 : _messenger(messenger)
                 , _roomId(roomId)
-                , _userId(userId)
             { /* empty */ }
 
             // IRoom::Notification methods
-            virtual void Message(const string& senderId, const string& message) override
+            virtual void Message(const string& senderName, const string& message) override
             {
                 ASSERT(_messenger != nullptr);
-                _messenger->MessageHandler(_roomId, _userId, senderId, message);
+                _messenger->MessageHandler(_roomId, senderName, message);
             }
 
             // QueryInterface implementation
@@ -94,7 +63,6 @@ namespace Plugin {
         private:
             Messenger* _messenger;
             string _roomId;
-            string _userId;
         }; // class Notification
 
         // Callback handling
@@ -103,23 +71,22 @@ namespace Plugin {
             Callback(const Callback&) = delete;
             Callback& operator=(const Callback&) = delete;
 
-            Callback(Messenger* messenger, const string& roomId, const string& userId)
+            Callback(Messenger* messenger, const string& roomId)
                 : _messenger(messenger)
-                , _userId(userId)
                 , _roomId(roomId)
             { /* empty */}
 
             // IRoom::ICallback methods
-            virtual void Joined(const string& userId) override
+            virtual void Joined(const string& userName) override
             {
                 ASSERT(_messenger != nullptr);
-                _messenger->UserJoinedHandler(_roomId, _userId, userId);
+                _messenger->UserJoinedHandler(_roomId, userName);
             }
 
-            virtual void Left(const string& userId) override
+            virtual void Left(const string& userName) override
             {
                 ASSERT(_messenger != nullptr);
-                _messenger->UserLeftHandler(_roomId, _userId, userId);
+                _messenger->UserLeftHandler(_roomId, userName);
             }
 
             // QueryInterface implementation
@@ -129,44 +96,63 @@ namespace Plugin {
 
         private:
             Messenger* _messenger;
-            string _userId;
             string _roomId;
         }; // class Callback
-
-        // Messenger event methods
-        void RoomCreatedHandler(const string& roomId);
-        void RoomDestroyedHandler(const string& roomId);
-        void UserJoinedHandler(const string& roomId, const string& addresseeId, const string& userId);
-        void UserLeftHandler(const string& roomId, const string& addresseeId, const string& userId);
-        void MessageHandler(const string& roomId, const string& addresseeId, const string& senderId, const string& message);
 
         // QueryInterface implementation
         BEGIN_INTERFACE_MAP(Messenger)
             INTERFACE_ENTRY(PluginHost::IPlugin)
-            INTERFACE_ENTRY(PluginHost::IWeb)
             INTERFACE_ENTRY(Exchange::IRoomAdministrator::INotification)
+            INTERFACE_ENTRY(PluginHost::IDispatcher)
             INTERFACE_AGGREGATE(Exchange::IRoomAdministrator, _roomAdmin)
         END_INTERFACE_MAP
 
-    private:
-        Core::ProxyType<Web::Response> _GetMethod(Core::TextSegmentIterator& index, const Web::Request& request);
-        Core::ProxyType<Web::Response> _PostMethod(Core::TextSegmentIterator& index, const Web::Request& request);
+        string JoinRoom(const string& roomId, const string& userName);
+        bool LeaveRoom(const string& roomId);
+        bool SendMessage(const string& roomId, const string& message);
 
-        // Web request handlers
-        void _GetRooms(Core::JSON::ArrayType<Core::JSON::String>& rooms) const;
-        bool _GetRoomMembers(const string& roomId, Core::JSON::ArrayType<Core::JSON::String>& roomMembers) const;
-        bool _JoinRoom(const string& roomId, const string& userId);
-        bool _LeaveRoom(const string& roomId, const string& userId);
-        bool _SendMessage(const string& roomId, const string& userId, const string& message);
+        void UserJoinedHandler(const string& roomId, const string& userName)
+        {
+            event_userupdate(roomId, userName, JsonData::Messenger::UserupdateParamsData::ActionType::JOINED);
+        }
+
+        void UserLeftHandler(const string& roomId, const string& userName)
+        {
+            event_userupdate(roomId, userName, JsonData::Messenger::UserupdateParamsData::ActionType::LEFT);
+        }
+
+        void MessageHandler(const string& roomId, const string& senderName, const string& message)
+        {
+            event_message(roomId, senderName, message);
+        }
+
+        // IMessenger::INotification methods
+        void Created(const string& roomName) override
+        {
+            event_roomupdate(roomName, JsonData::Messenger::RoomupdateParamsData::ActionType::CREATED);
+        }
+
+        void Destroyed(const string& roomName) override
+        {
+            event_roomupdate(roomName, JsonData::Messenger::RoomupdateParamsData::ActionType::DESTROYED);
+        }
+
+    private:
+        // JSON-RPC
+        void RegisterAll();
+        void UnregisterAll();
+        uint32_t endpoint_join(const JsonData::Messenger::JoinParamsData& params, JsonData::Messenger::JoinResultInfo& response);
+        uint32_t endpoint_leave(const JsonData::Messenger::JoinResultInfo& params);
+        uint32_t endpoint_send(const JsonData::Messenger::SendParamsData& params);
+        void event_roomupdate(const string& room, const JsonData::Messenger::RoomupdateParamsData::ActionType& action);
+        void event_userupdate(const string& id, const string& user, const JsonData::Messenger::UserupdateParamsData::ActionType& action);
+        void event_message(const string& id, const string& user, const string& message);
 
         uint32_t _pid;
-        size_t _skipUrl;
         PluginHost::IShell* _service;
         Exchange::IRoomAdministrator* _roomAdmin;
-        std::set<string> _rooms;
-        std::map<std::pair<string /* roomId */, string /* userId */>, Exchange::IRoomAdministrator::IRoom*> _joinedRooms;
+        std::map<string, Exchange::IRoomAdministrator::IRoom*> _rooms;
         mutable Core::CriticalSection _adminLock;
-        mutable Core::CriticalSection _joinedRoomsLock;
     }; // class Messenger
 
 } // namespace Plugin
