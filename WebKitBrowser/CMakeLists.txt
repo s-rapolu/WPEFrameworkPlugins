@@ -31,6 +31,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(GLIB REQUIRED)
 find_package(WPEWebKit REQUIRED)
+pkg_check_modules(WPEBackend wpe-0.2)
 
 add_library(${MODULE_NAME} SHARED  
     Module.cpp
@@ -46,11 +47,13 @@ set_target_properties(${MODULE_NAME} PROPERTIES
 target_link_libraries(${MODULE_NAME}
     PRIVATE 
         ${NAMESPACE}Plugins::${NAMESPACE}Plugins
+        ${WPEBackend_LIBRARIES}
         ${GLIB_LIBRARIES}
         ${WPE_WEBKIT_LIBRARIES})
 
 target_include_directories(${MODULE_NAME} 
     PRIVATE 
+        ${WPEBackend_INCLUDE_DIRS}
         ${WPE_WEBKIT_INCLUDE_DIRS}
         ${WPE_WEBKIT_INCLUDE_DIRS}/WPE
         ${GLIB_INCLUDE_DIRS})
