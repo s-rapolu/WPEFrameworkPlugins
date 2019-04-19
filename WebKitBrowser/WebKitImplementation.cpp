@@ -882,6 +882,9 @@ static GSourceFuncs _handlerIntervention =
 
             auto* preferences = webkit_settings_new();
 
+            webkit_settings_set_enable_encrypted_media(preferences, TRUE);
+            webkit_settings_set_enable_mediasource(preferences, TRUE);
+
 #if 0
             // FIXME: Add this to glib api downstream if really needed.
             // Allow mixed content.
@@ -923,10 +926,13 @@ static GSourceFuncs _handlerIntervention =
             g_object_unref(context);
             g_object_unref(preferences);
 
+#if 0
+            // FIXME: Requires downporting a big patch (which doesn't apply cleanly) from 2.24
             if (_config.Transparent.Value() == true) {
                 WebKitColor transparent = { 0, 0, 0, 0 };
                 webkit_web_view_set_background_color(_view, &transparent);
             }
+#endif
 #if 0
             // FIXME: Not exposed in glib API.
             WKPageSetCustomBackingScaleFactor(_page, _config.ScaleFactor.Value());
