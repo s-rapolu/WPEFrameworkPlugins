@@ -882,7 +882,7 @@ static GSourceFuncs _handlerIntervention =
                 "allow-display-of-insecure-content", !secure,
                 "javascript-can-close-window", _config.AllowWindowClose.Value(),
                 "enable-webgl", _config.WebGLEnabled.Value(),
-                "enable-write-console-messages-to-stdout", TRUE,
+                "enable-non-composited-webgl", _config.NonCompositedWebGLEnabled.Value(),
                 nullptr);
 
             if (_config.UserAgent.IsSet() == true && _config.UserAgent.Value().empty() == false)
