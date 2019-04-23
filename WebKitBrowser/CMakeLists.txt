@@ -4,6 +4,7 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 option(PLUGIN_WEBKITBROWSER_YOUTUBE "Include YouTube in seperate plugin." OFF)
 option(PLUGIN_WEBKITBROWSER_APPS "Include Apps instance in seperate plugin." OFF)
 option(PLUGIN_WEBKITBROWSER_UX "Include UX in seperate plugin." OFF)
+option(PLUGIN_WEBKITBROWSER_LIGHTNING "Include Lightning in a seperate plugin." OFF)
 
 set(PLUGIN_WEBKITBROWSER_AUTOSTART false CACHE STRING "Automatically start WebKitBrowser plugin")
 set(PLUGIN_WEBKITBROWSER_TRANSPARENT false CACHE STRING "Set transparency")
@@ -20,11 +21,18 @@ set(PLUGIN_WEBKITBROWSER_COOKIESTORAGE "" CACHE STRING "Browser cookie storage p
 set(PLUGIN_WEBKITBROWSER_WINDOWCLOSE false CACHE STRING "Allow window close")
 set(PLUGIN_WEBKITBROWSER_WEBGL true CACHE STRING "Enable WebGL")
 set(PLUGIN_WEBKITBROWSER_THREADEDPAINTING "1" CACHE STRING "Threads for the Threaded Painting")
+
 set(PLUGIN_YOUTUBE_USERAGENT ${PLUGIN_WEBKITBROWSER_USERAGENT} CACHE STRING "User agent string YouTube")
+
 set(PLUGIN_UX_AUTOSTART false CACHE STRING "Automatically start UX plugin")
 set(PLUGIN_UX_USERAGENT ${PLUGIN_WEBKITBROWSER_USERAGENT} CACHE STRING "User agent string for UX")
+
 set(PLUGIN_APPS_AUTOSTART false CACHE STRING "Automatically start Apps plugin")
 set(PLUGIN_APPS_USERAGENT ${PLUGIN_WEBKITBROWSER_USERAGENT} CACHE STRING "User agent string for Apps")
+
+set(PLUGIN_LIGHTNING_AUTOSTART false CACHE STRING "Automatically start Lightning plugin")
+set(PLUGIN_LIGHTNING_MEMORYPRESSURE "${PLUGIN_WEBKITBROWSER_MEMORYPRESSURE}" CACHE STRING "Memory Pressure")
+set(PLUGIN_LIGHTNING_NONCOMPOSITEDWEBGL false CACHE STRING "Enable noncompositedwebgl")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -87,3 +95,9 @@ endif()
 if(PLUGIN_WEBKITBROWSER_UX)
     write_config( UX )
 endif()
+
+# Lightning configuration
+if(PLUGIN_WEBKITBROWSER_LIGHTNING)
+    write_config( Lightning )
+endif()
+
