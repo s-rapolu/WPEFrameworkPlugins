@@ -885,6 +885,9 @@ static GSourceFuncs _handlerIntervention =
                 "enable-write-console-messages-to-stdout", TRUE,
                 nullptr);
 
+            webkit_settings_set_enable_encrypted_media(preferences, TRUE);
+            webkit_settings_set_enable_mediasource(preferences, TRUE);
+
             if (_config.UserAgent.IsSet() == true && _config.UserAgent.Value().empty() == false)
                 webkit_settings_set_user_agent(preferences, _config.UserAgent.Value().c_str());
 
