@@ -4,6 +4,7 @@
 #include <interfaces/IMessenger.h>
 #include <interfaces/json/JsonData_Messenger.h>
 #include <map>
+#include <set>
 #include <functional>
 
 namespace WPEFramework {
@@ -12,7 +13,7 @@ namespace Plugin {
 
     class Messenger : public PluginHost::IPlugin
                     , public Exchange::IRoomAdministrator::INotification
-                    , public PluginHost::JSONRPC {
+                    , public PluginHost::JSONRPCSupportsEventStatus {
     public:
         Messenger(const Messenger&) = delete;
         Messenger& operator=(const Messenger&) = delete;
@@ -21,7 +22,7 @@ namespace Plugin {
             : _pid(0)
             , _service(nullptr)
             , _roomAdmin(nullptr)
-            , _rooms()
+            , _roomIds()
             , _adminLock()
         {
             RegisterAll();
@@ -129,16 +130,27 @@ namespace Plugin {
         // IMessenger::INotification methods
         void Created(const string& roomName) override
         {
+            _adminLock.Lock();
+            ASSERT(_rooms.find(roomName) == _rooms.end());
+            _rooms.insert(roomName);
+            _adminLock.Unlock();
+
             event_roomupdate(roomName, JsonData::Messenger::RoomupdateParamsData::ActionType::CREATED);
         }
 
         void Destroyed(const string& roomName) override
         {
             event_roomupdate(roomName, JsonData::Messenger::RoomupdateParamsData::ActionType::DESTROYED);
+
+            _adminLock.Lock();
+            ASSERT(_rooms.find(roomName) != _rooms.end());
+            _rooms.erase(roomName);
+            _adminLock.Unlock();
         }
 
     private:
         string GenerateRoomId(const string& roomName, const string& userName);
+        bool SubscribeUserUpdate(const string& roomId, bool subscribe);
 
         // JSON-RPC
         void RegisterAll();
@@ -153,7 +165,8 @@ namespace Plugin {
         uint32_t _pid;
         PluginHost::IShell* _service;
         Exchange::IRoomAdministrator* _roomAdmin;
-        std::map<string, Exchange::IRoomAdministrator::IRoom*> _rooms;
+        std::map<string, Exchange::IRoomAdministrator::IRoom*> _roomIds;
+        std::set<string> _rooms;
         mutable Core::CriticalSection _adminLock;
     }; // class Messenger
 

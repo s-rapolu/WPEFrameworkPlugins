@@ -33,6 +33,7 @@ namespace Plugin {
         ASSERT(service != nullptr);
         ASSERT(_service == nullptr);
         ASSERT(_roomAdmin == nullptr);
+        ASSERT(_roomIds.empty() == true);
         ASSERT(_rooms.empty() == true);
 
         _service = service;
@@ -51,13 +52,14 @@ namespace Plugin {
         ASSERT(service == _service);
 
         // Exit all the rooms (if any) that were joined by this client
-        for (auto& room : _rooms) {
+        for (auto& room : _roomIds) {
             room.second->Release();
         }
 
-        _rooms.clear();
+        _roomIds.clear();
 
         _roomAdmin->Unregister(this);
+        _rooms.clear();
 
         _roomAdmin->Release();
         _roomAdmin = nullptr;
@@ -84,18 +86,9 @@ namespace Plugin {
             if (room != nullptr) {
 
                 _adminLock.Lock();
-                bool emplaced = _rooms.emplace(roomId, room).second;
+                bool emplaced = _roomIds.emplace(roomId, room).second;
                 _adminLock.Unlock();
                 ASSERT(emplaced);
-
-                // Interested in join/leave notifications as well
-                Callback* cb = Core::Service<Callback>::Create<Callback>(this, roomId);
-                ASSERT(cb != nullptr);
-
-                if (cb != nullptr) {
-                    room->SetCallback(cb);
-                    cb->Release(); // Make room the only owner of the callback object.
-                }
 
                 result = true;
             }
@@ -106,19 +99,49 @@ namespace Plugin {
         return (result? roomId : string{});
     }
 
+    bool Messenger::SubscribeUserUpdate(const string& roomId, bool subscribe)
+    {
+        bool result = false;
+
+        _adminLock.Lock();
+
+        auto it(_roomIds.find(roomId));
+
+        if (it != _roomIds.end()) {
+            Callback* cb = nullptr;
+
+            if (subscribe) {
+                cb = Core::Service<Callback>::Create<Callback>(this, roomId);
+                ASSERT(cb != nullptr);
+            }
+
+            (*it).second->SetCallback(cb);
+
+            if (cb != nullptr) {
+                cb->Release(); // Make room the only owner of the callback object.
+            }
+
+            result = true;
+        }
+
+        _adminLock.Unlock();
+
+        return result;
+    }
+
     bool Messenger::LeaveRoom(const string& roomId)
     {
         bool result = false;
 
         _adminLock.Lock();
 
-        auto it(_rooms.find(roomId));
+        auto it(_roomIds.find(roomId));
 
-        if (it != _rooms.end()) {
+        if (it != _roomIds.end()) {
             // Exit the room.
             (*it).second->Release();
             // Invalidate the room ID.
-            _rooms.erase(it);
+            _roomIds.erase(it);
             result = true;
         }
 
@@ -133,9 +156,9 @@ namespace Plugin {
 
         _adminLock.Lock();
 
-        auto it(_rooms.find(roomId));
+        auto it(_roomIds.find(roomId));
 
-        if (it != _rooms.end()) {
+        if (it != _roomIds.end()) {
             // Send the message to the room.
             (*it).second->SendMessage(message);
             result = true;

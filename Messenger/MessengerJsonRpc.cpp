@@ -14,6 +14,20 @@ namespace Plugin {
 
     void Messenger::RegisterAll()
     {
+        RegisterEventStatusListener(_T("roomupdate"), [this](const string& client, Status status) {
+            // Notify of all rooms created to date.
+            for (const string& room : _rooms) {
+                event_roomupdate(room, JsonData::Messenger::RoomupdateParamsData::ActionType::CREATED);
+            }
+        });
+
+        RegisterEventStatusListener(_T("userupdate"), [this](const string& client, Status status) {
+            // Subscribe the lowe level room user to userupdate notification.
+            // This may immediately sent notifications of all users already present in the room.
+            const string roomId = client.substr(0, client.find('.'));
+            SubscribeUserUpdate(roomId, status == Status::registered);
+        });
+
         Register<JoinParamsData,JoinResultInfo>(_T("join"), &Messenger::endpoint_join, this);
         Register<JoinResultInfo,void>(_T("leave"), &Messenger::endpoint_leave, this);
         Register<SendParamsData,void>(_T("send"), &Messenger::endpoint_send, this);
