@@ -939,12 +939,12 @@ static GSourceFuncs _handlerIntervention =
             // Move into the correct state, as requested
             auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(_view));
             _adminLock.Lock();
-            if ((_state == PluginHost::IStateControl::SUSPENDED) || (_state == PluginHost::IStateControl::UNINITIALIZED)) {
-                _state = PluginHost::IStateControl::UNINITIALIZED;
+            if (_state == PluginHost::IStateControl::SUSPENDED) {
                 wpe_view_backend_add_activity_state(backend, wpe_view_activity_state_visible);
                 OnStateChange(PluginHost::IStateControl::SUSPENDED);
             } else {
-                _state = PluginHost::IStateControl::UNINITIALIZED;
+                printf("WebKitImplementation -> setting initial state to full\n");
+                _state = PluginHost::IStateControl::RESUMED;
                 wpe_view_backend_add_activity_state(backend, wpe_view_activity_state_visible | wpe_view_activity_state_focused | wpe_view_activity_state_in_window);
                 OnStateChange(PluginHost::IStateControl::RESUMED);
             }
