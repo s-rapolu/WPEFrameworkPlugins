@@ -1,6 +1,16 @@
 #include "DsgccClient.h"
 
 namespace WPEFramework {
+
+ENUM_CONVERSION_BEGIN(Exchange::IDsgccClient::state)
+
+    { Exchange::IDsgccClient::Unknown,  _TXT("Unknown") },
+    { Exchange::IDsgccClient::Ready,    _TXT("Ready")   },
+    { Exchange::IDsgccClient::Changed,  _TXT("Changed")  },
+    { Exchange::IDsgccClient::Error,    _TXT("Error")    },
+
+ENUM_CONVERSION_END(Exchange::IDsgccClient::state)
+
 namespace Plugin {
 
     SERVICE_REGISTRATION(DsgccClient, 1, 0);
@@ -32,6 +42,7 @@ namespace Plugin {
             _service->Unregister(&_notification);
             _service = nullptr;
         } else {
+            _implementation->Callback(&_sink);
             _implementation->Configure(_service);
         }
 
@@ -44,6 +55,7 @@ namespace Plugin {
         ASSERT(_implementation != nullptr);
 
         _service->Unregister(&_notification);
+        _implementation->Callback(nullptr);
 
         if (_implementation->Release() != Core::ERROR_DESTRUCTION_SUCCEEDED) {
 
@@ -99,13 +111,23 @@ namespace Plugin {
 
                 result->ContentType = Web::MIMETypes::MIME_JSON;
                 result->Body(data);
+            } else if (index.Current().Text() == _T("State")) {
+                Core::ProxyType<Web::JSONBodyType<Data> > data (jsonDataFactory.Element());
+                data->State = _implementation->State();
+
+                result->ContentType = Web::MIMETypes::MIME_JSON;
+                result->Body(data);
             } else {
                 result->ErrorCode = Web::STATUS_BAD_REQUEST;
                 result->Message = _T("Unsupported GET Request");
             }
         } else if ((request.Verb == Web::Request::HTTP_POST) && ((index.Next()) && (index.Next()))) {
 
-            if (index.Current().Text() == _T("Test")) {
+            if (index.Current().Text() == _T("Restart")) {
+                _implementation->Restart();
+                result->ErrorCode = Web::STATUS_OK;
+                result->Message = "OK";
+            } else if (index.Current().Text() == _T("Test")) {
                 std::string str = request.Body<const Data>()->Str.Value();
 
                 _implementation->DsgccClientSet(str);
@@ -134,6 +156,17 @@ namespace Plugin {
                 PluginHost::IShell::FAILURE));
         }
     }
+
+    void DsgccClient::StateChange(Exchange::IDsgccClient::state state)
+    {
+        Data data;
+        data.State = Core::EnumerateType<Exchange::IDsgccClient::state>(state).Data();
+        string message;
+        data.ToString(message);
+        TRACE_L1("%s: %s", __FUNCTION__, message.c_str());
+        _service->Notify(message);
+    }
+
 
 }
 } //namespace WPEFramework::Plugin

@@ -14,6 +14,36 @@ namespace Plugin {
         DsgccClient(const DsgccClient&) = delete;
         DsgccClient& operator=(const DsgccClient&) = delete;
 
+        class Sink : public Exchange::IDsgccClient::INotification {
+        private:
+            Sink() = delete;
+            Sink(const Sink&) = delete;
+            Sink& operator=(const Sink&) = delete;
+
+        public:
+            Sink(DsgccClient* parent)
+                : _parent(*parent)
+            {
+                ASSERT(parent != nullptr);
+            }
+            virtual ~Sink()
+            {
+            }
+
+        public:
+            void StateChange(const Exchange::IDsgccClient::state state) override
+            {
+                _parent.StateChange(state);
+            }
+
+            BEGIN_INTERFACE_MAP(Sink)
+            INTERFACE_ENTRY(Exchange::IDsgccClient::INotification)
+            END_INTERFACE_MAP
+
+        private:
+            DsgccClient& _parent;
+        }; // Sink
+
         class Notification : public RPC::IRemoteProcess::INotification {
 
         private:
@@ -46,7 +76,7 @@ namespace Plugin {
 
         private:
             DsgccClient& _parent;
-        };
+        }; // Notification
 
         class Config : public Core::JSON::Container {
         private:
@@ -66,7 +96,7 @@ namespace Plugin {
 
         public:
             Core::JSON::Boolean OutOfProcess;
-        };
+        };  // Config
 
     public:
         class Data : public Core::JSON::Container {
@@ -79,23 +109,26 @@ namespace Plugin {
                 : Core::JSON::Container()
                 , Str()
             {
-                Add(_T("Str"), &Str);
                 Add(_T("channels"), &Channels);
+                Add(_T("State"), &State);
+                Add(_T("Str"), &Str);
             }
             ~Data()
             {
             }
 
         public:
-            Core::JSON::String Str;
             Core::JSON::ArrayType<Channel> Channels;
-        };
+            Core::JSON::String State;
+            Core::JSON::String Str;
+        }; //Data
 
     public:
         DsgccClient()
             : _service(nullptr)
             , _implementation(nullptr)
             , _notification(this)
+            , _sink(this)
         {
         }
 
@@ -139,13 +172,7 @@ namespace Plugin {
 
     private:
         void Deactivated(RPC::IRemoteProcess* process);
-
-        void AsyncStatus(const string& status)
-        {
-            TRACE_L1("Sending async status. %s", status);
-            string message(string("{ \"Status\": \" + status + \" }"));
-            _service->Notify(message);
-        }
+        void StateChange(Exchange::IDsgccClient::state state);
 
     private:
         uint8_t _skipURL;
@@ -153,6 +180,7 @@ namespace Plugin {
         PluginHost::IShell* _service;
         Exchange::IDsgccClient* _implementation;
         Core::Sink<Notification> _notification;
+        Core::Sink<Sink> _sink;
     };
 
 } //namespace Plugin

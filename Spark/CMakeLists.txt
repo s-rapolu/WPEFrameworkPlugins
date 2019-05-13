@@ -1,9 +1,3 @@
-cmake_minimum_required(VERSION 3.3)
-
-find_package(WPEFramework)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
 set(PLUGIN_NAME Spark)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
@@ -29,10 +23,16 @@ if (PLATFORM_LINUX)
             RT_PLATFORM_LINUX=ON)
 endif()
 
-if (PLATFORM_GENERIC_EGL)
+if (PLATFORM_WPEFRAMEWORK)
     target_compile_definitions(${MODULE_NAME}
         PRIVATE
-            PX_PLATFORM_GENERIC_EGL=ON)
+            PX_PLATFORM_WPEFRAMEWORK=ON)
+endif()
+
+if (PLATFORM_WAYLAND_EGL)
+    target_compile_definitions(${MODULE_NAME}
+        PRIVATE
+            PX_PLATFORM_WAYLAND_EGL=ON)
 endif()
 
 target_compile_definitions(${MODULE_NAME}
@@ -54,10 +54,11 @@ target_link_libraries(${MODULE_NAME}
         Spark::Spark)
 
 # Library installation section
-string(TOLOWER ${NAMESPACE} STORAGENAME)
-install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${STORAGENAME}/plugins)
+install(
+    TARGETS ${MODULE_NAME}
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${STORAGENAME}/plugins)
 
 set(PLUGIN_SPARK_AUTOSTART false CACHE STRING "Automatically start Spark plugin")
-set(PLUGIN_SPARK_STARTURL "about:blank" CACHE STRING "Initial URL for Spark plugin")
+set(PLUGIN_SPARK_STARTURL "browser.js" CACHE STRING "Initial URL for Spark plugin")
 
 write_config(${PLUGIN_NAME})

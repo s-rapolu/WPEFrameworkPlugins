@@ -24,7 +24,7 @@ namespace Plugin {
         // Setup skip URL for right offset.
         _pid = 0;
         _service = service;
-        _skipURL = _service->WebPrefix().length();
+        _skipURL = static_cast<uint32_t>(_service->WebPrefix().length());
 
         config.FromString(_service->ConfigLine());
 
@@ -53,6 +53,17 @@ namespace Plugin {
                 ASSERT(_memory != nullptr);
 
                 _memory->Observe(true);
+
+				PluginHost::ISubSystem* subSystem = service->SubSystems();
+
+                if (subSystem != nullptr) {
+                    if (subSystem->IsActive(PluginHost::ISubSystem::WEBSOURCE) == true) {
+                        SYSLOG(Logging::Startup, (_T("WebSource is not defined as External !!")));
+                    } else {
+                        subSystem->Set(PluginHost::ISubSystem::WEBSOURCE, nullptr);
+                    }
+                    subSystem->Release();
+                }
             }
         }
 

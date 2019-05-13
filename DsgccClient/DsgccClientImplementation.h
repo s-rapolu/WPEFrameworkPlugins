@@ -2,15 +2,17 @@
 #define __DSGCCCLIENTIMPLEMENTATION_H
 
 #include "Module.h"
-#include <interfaces/IDsgccClient.h>
 #include <interfaces/IMemory.h>
 
+#include <refsw/dsgcc_client_api.h>
 #include "DsgParser.h"
 
 namespace WPEFramework {
 namespace Plugin {
 
-    class DsgccClientImplementation : public Exchange::IDsgccClient {
+    class DsgccClientImplementation
+        : public Exchange::IDsgccClient
+    {
     private:
         class Config : public Core::JSON::Container {
         private:
@@ -29,6 +31,8 @@ namespace Plugin {
                 Add(_T("vctId"), &VctId);
                 Add(_T("dsgSiHeaderSize"), &DsgSiHeaderSize);
                 Add(_T("dsgCaHeaderSize"), &DsgCaHeaderSize);
+                Add(_T("dsgCacheFile"), &DsgCacheFile);
+
             }
             ~Config()
             {
@@ -43,42 +47,39 @@ namespace Plugin {
             Core::JSON::DecUInt16 VctId;
             Core::JSON::DecUInt16 DsgSiHeaderSize;
             Core::JSON::DecUInt16 DsgCaHeaderSize;
+            Core::JSON::String DsgCacheFile;
         };
 
         class SiThread : public Core::Thread {
-        private:
-            SiThread(const SiThread&) = delete;
-            SiThread& operator=(const SiThread&) = delete;
 
         public:
-            SiThread(DsgccClientImplementation::Config& config)
-                : Core::Thread(Core::Thread::DefaultStackSize(), _T("DsgccClient"))
-                , _config(config)
-                , _isRunning(true) {
-            }
-
-            virtual ~SiThread()
-            {
-            }
+            SiThread(DsgccClientImplementation* parent);
+            virtual ~SiThread();
+            void Setup();
 
             string getChannels() const {
                 return _channels;
             }
 
-        public:
             void Dispose()
             {
                 TRACE_L1("SiThread::%s: Done!!! ", __FUNCTION__);
             }
+        private:
+            SiThread(const SiThread&) = delete;
+            SiThread& operator=(const SiThread&) = delete;
+            uint32_t Worker() override;
+            void LoadFromCache();
+            void SaveToCache();
 
         private:
+            DsgccClientImplementation* _parent;
             DsgccClientImplementation::Config& _config;
             bool _isRunning;
+            bool _isInitialized;
             string _channels;
-
-            virtual uint32_t Worker() override;
-            void Setup(unsigned int port, unsigned int dsgType, unsigned int dsgId);
-            void HexDump(const char* label, const std::string& msg, uint16_t charsPerLine = 32);
+            struct dsgClientRegInfo regInfoData;
+            int sharedMemoryId;
         };
 
         class CaThread : public Core::Thread {
@@ -88,9 +89,10 @@ namespace Plugin {
 
         public:
             CaThread(DsgccClientImplementation::Config& config)
-                : Core::Thread(Core::Thread::DefaultStackSize(), _T("DsgccClient"))
+                : Core::Thread(Core::Thread::DefaultStackSize(), _T("DsgCaThread"))
                 , _config(config)
-                , _isRunning(true) {
+                , _isRunning(true)
+                , _isInitialized(false) {
             }
 
             virtual ~CaThread()
@@ -106,9 +108,10 @@ namespace Plugin {
         private:
             DsgccClientImplementation::Config& _config;
             bool _isRunning;
+            bool _isInitialized;
             string _channels;
 
-            virtual uint32_t Worker() override;
+            uint32_t Worker() override;
         };
 
         class ClientCallbackService : public Core::Thread {
@@ -145,19 +148,33 @@ namespace Plugin {
         {
         }
 
+        void Callback(IDsgccClient::INotification* callback);
         uint32_t Configure(PluginHost::IShell* service);
         void DsgccClientSet(const string& str);
         string GetChannels() const;
+        string State() const;
+        void Restart();
+
+        void StateChange(IDsgccClient::state state)
+        {
+            _state = state;
+            if (_callback) {
+                _callback->StateChange(_state);
+            }
+        }
 
         BEGIN_INTERFACE_MAP(DsgccClientImplementation)
         INTERFACE_ENTRY(Exchange::IDsgccClient)
         END_INTERFACE_MAP
 
     private:
+        PluginHost::IShell* _service;
+        IDsgccClient::state _state;
         std::list<PluginHost::IStateControl::INotification*> _observers;
         Config _config;
         SiThread _siThread;
         CaThread _caThread;
+        IDsgccClient::INotification* _callback;
         ClientCallbackService _dsgCallback;
         string str;
     };

@@ -1,52 +1,60 @@
-# - Try to find gstreamer
-# Once done this will define
-#  GSTREAMER_FOUND - System has gstreamer
-#  GSTREAMER_INCLUDE_DIRS - The gstreamer include directories
-#  GSTREAMER_LIBRARIES - The libraries needed to use gstreamer
+# - Try to find gstreamer-1.0.
+# Once done, this will define
+#
+#  GSTREAMER_FOUND - the gstreamer-1.0 is available
+#  GStreamer::GStreamer - The gstreamer-1.0 library and all its dependecies
+#
+# Copyright (C) 2019 Metrological B.V
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1.  Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+# 2.  Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER AND ITS CONTRIBUTORS ``AS
+# IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR ITS
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#gstreamer has no pc file to search for
-
-find_path(
-    GSTREAMER_INCLUDE_DIR
-    NAMES gst/gst.h
-    PATH_SUFFIXES gstreamer-1.0
-    HINTS /usr/include /usr/local/include ${CMAKE_INSTALL_PREFIX}/usr/include)
-
-find_library(
-    GSTREAMER_LIBRARY
-    NAMES gstreamer-1.0
-    HINTS /usr/lib /usr/local/lib ${CMAKE_INSTALL_PREFIX}/usr/lib
-    PATH_SUFFIXES gstreamer-1.0
-)    
-
-if("${GSTREAMER_INCLUDE_DIR}" STREQUAL "" OR "${GSTREAMER_LIBRARY}" STREQUAL "")
-    set(GSTREAMER_FOUND_TEXT "Not found")
-else()
-    set(GSTREAMER_FOUND_TEXT "Found")
-endif()
-
-if (WPEFRAMEWORK_VERBOSE_BUILD)
-    message(STATUS "gstreamer       : ${GSTREAMER_FOUND_TEXT}")
-    message(STATUS "  version      : ${PC_GSTREAMER_VERSION}")
-    message(STATUS "  cflags       : ${PC_GSTREAMER_CFLAGS}")
-    message(STATUS "  cflags other : ${PC_GSTREAMER_CFLAGS_OTHER}")
-    message(STATUS "  include dirs : ${GSTREAMER_INCLUDE_DIR}")
-    message(STATUS "  libs         : ${GSTREAMER_LIBRARY}")
-endif()
-
-set(GSTREAMER_DEFINITIONS ${PC_GSTREAMER_PLUGINS_CFLAGS_OTHER})
-set(GSTREAMER_INCLUDE_DIRS ${GSTREAMER_INCLUDE_DIR})
-set(GSTREAMER_LIBRARIES ${GSTREAMER_LIBRARY})
-set(GSTREAMER_LIBRARY_DIRS ${PC_GSTREAMER_LIBRARY_DIRS})
+find_package(PkgConfig)
+pkg_check_modules(PC_GSTREAMER gstreamer-1.0)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(GSTREAMER DEFAULT_MSG
-    GSTREAMER_LIBRARIES GSTREAMER_INCLUDE_DIRS)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(PC_GSTREAMER DEFAULT_MSG PC_GSTREAMER_FOUND)
 
-if(GSTREAMER_FOUND)
-    message(WARNING "got gstreamer!!!!!!!!!!!!!!!")
-else()
-    message(WARNING "Could not find gstreamer!!!!!!!!!!!!!!")
+mark_as_advanced(PC_GSTREAMER_INCLUDE_DIRS PC_GSTREAMER_LIBRARIES PC_GSTREAMER_LIBRARY_DIRS)
+
+if(${PC_GSTREAMER_FOUND})
+    find_library(GSTREAMER_LIBRARY gstreamer-1.0
+        HINTS ${PC_GSTREAMER_LIBRARY_DIRS}
+    )
+
+    set(GSTREAMER_LIBRARIES ${PC_GSTREAMER_LIBRARIES})
+    set(GSTREAMER_INCLUDES ${PC_GSTREAMER_INCLUDE_DIRS})
+    set(GSTREAMER_FOUND ${PC_GSTREAMER_FOUND})
+
+    if(NOT TARGET GStreamer::GStreamer)
+        add_library(GStreamer::GStreamer UNKNOWN IMPORTED)
+
+        set_target_properties(GStreamer::GStreamer
+                PROPERTIES
+                IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+                IMPORTED_LOCATION "${GSTREAMER_LIBRARY}"
+                INTERFACE_COMPILE_DEFINITIONS "GSTREAMER"
+                INTERFACE_COMPILE_OPTIONS "${PC_GSTREAMER_CFLAGS_OTHER}"
+                INTERFACE_INCLUDE_DIRECTORIES "${PC_GSTREAMER_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${PC_GSTREAMER_LIBRARIES}"
+                )
+    endif()
 endif()
-
-mark_as_advanced(GSTREAMER_DEFINITIONS GSTREAMER_INCLUDE_DIRS GSTREAMER_LIBRARIES)

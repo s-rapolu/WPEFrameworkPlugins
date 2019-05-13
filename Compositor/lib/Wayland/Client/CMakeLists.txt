@@ -13,11 +13,18 @@ add_library(${TARGET} SHARED Westeros.cpp)
 
 target_link_libraries(${TARGET}
     PRIVATE
-        ${EGL_LIBRARIES}
         WaylandEGL::WaylandEGL
+        ${EGL_LIBRARIES}
         ${NAMESPACE}Core::${NAMESPACE}Core
         WesterosClient::WesterosClient
         WaylandClient::WaylandClient)
+
+set_target_properties(${TARGET} PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES
+        VERSION ${VERSION}
+        SOVERSION ${VERSION_MAJOR}
+)
 
 if (NXCLIENT_FOUND)
     target_link_libraries(${TARGET}

@@ -18,9 +18,7 @@
 
 pxContext context;
 extern rtScript script;
-
-#define ENTERSCENELOCK() rtWrapperSceneUpdateEnter();
-#define EXITSCENELOCK()  rtWrapperSceneUpdateExit();
+extern bool gDirtyRectsEnabled;
 
 namespace WPEFramework {
 namespace Plugin {
@@ -129,6 +127,17 @@ namespace Plugin {
                     if (RT_OK == rtSettings::instance()->value("screenHeight", screenHeight)) {
                         _height = screenHeight.toInt32();
                     }
+
+                    rtValue dirtyRectsSetting;
+                    if (RT_OK == rtSettings::instance()->value("enableDirtyRects", dirtyRectsSetting)) {
+                        gDirtyRectsEnabled = dirtyRectsSetting.toString().compare("true") == 0;
+                    }
+
+                    rtValue optimizedUpdateSetting;
+                    if (RT_OK == rtSettings::instance()->value("enableOptimizedUpdate", optimizedUpdateSetting)) {
+                        bool enable = optimizedUpdateSetting.toString().compare("true") == 0;
+                        pxScene2d::enableOptimizedUpdate(enable);
+                    }
                 }
 
                 if (Core::File(fpsFile).Exists() == true) {
@@ -182,8 +191,6 @@ namespace Plugin {
 
                     } else {
                         length = std::min(url.length(), sizeof(buffer) - sizeof(prefix));
-
-                        strncat(buffer, url.c_str(), length);
                     }
 
                     if (length >= (sizeof(buffer) - sizeof(prefix))) {
@@ -191,7 +198,7 @@ namespace Plugin {
                         SYSLOG(Trace::Warning, (_T("URL size greater than 8000 bytes, so resetting url to browser.js")));
                         ::strcat(buffer, _T("browser.js"));
                     } else {
-                        ::strncat(buffer, url.c_str(), length);
+                        strncat(buffer, url.c_str(), length);
                     }
 
                     ENTERSCENELOCK()
@@ -225,17 +232,21 @@ namespace Plugin {
                 bool status = false;
                 rtValue r;
 
-                pxScene2d* scene = GetScene();
-                if (suspend == true) {
-                    scene->suspend(r, status);
-                    TRACE(Trace::Information, (_T("Suspend requested. Success: %s"), status ? _T("true") : _T("false")));
-                    sleep(1); //TODO:Suspend not clearing the background always, hence added the sleep, need to recheck
-                    _closed = true; //TODO: Added to suspend rendering on offscreen buffer also, need to recheck
-                }
-                else {
-                    scene->resume(r, status);
-                    TRACE(Trace::Information, (_T("Resume requested. Success: %s"), status ? _T("true") : _T("false")));
-                    _closed = false;
+                if (_view != nullptr) {
+                    pxScriptView* realClass = reinterpret_cast<pxScriptView*>(_view.getPtr());
+                    
+                    if (realClass != nullptr) {
+                        if (suspend == true) {
+                            realClass->suspend(r, status);
+                            TRACE(Trace::Information, (_T("Resume requested. Success: %s"), status ? _T("true") : _T("false")));
+                            _closed = true;
+                        }
+                        else {
+                            realClass->resume(r, status);
+                            TRACE(Trace::Information, (_T("Resume requested. Success: %s"), status ? _T("true") : _T("false")));
+                            _closed = false;
+                        }
+                    }
                 }
                 return status;
             }
@@ -361,6 +372,7 @@ namespace Plugin {
 
             virtual void onDraw(pxSurfaceNative) override
             {
+                context.updateRenderTick();
                 ENTERSCENELOCK();
                 if (_view != nullptr) {
                     _view->onDraw();
@@ -466,20 +478,6 @@ namespace Plugin {
                 EXITSCENELOCK()
 
                 return (Core::infinite);
-            }
-
-            inline pxScene2d* GetScene()
-            {
-                ENTERSCENELOCK()
-                rtValue args;
-                args.setString("scene");
-                rtValue scene;
-                pxScriptView::getScene(1, &args, &scene, _view);
-                pxScene2d* pxScene = (pxScene2d*)(scene.toObject().getPtr());
-
-                EXITSCENELOCK()
-
-                return pxScene;
             }
 
         private:
