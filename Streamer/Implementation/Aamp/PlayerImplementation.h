@@ -37,6 +37,9 @@ namespace Player {
             PlayerPlatform& operator=(const PlayerPlatform&) = delete;
 
         public:
+            typedef std::vector<int32_t> SpeedList;
+
+        public:
             PlayerPlatform(const Exchange::IStream::streamtype type, const uint8_t index, ICallback* callbacks);
             virtual ~PlayerPlatform();
 
@@ -58,6 +61,11 @@ namespace Player {
                 return (Exchange::IStream::state)_state;
             }
             uint32_t Load(const string& uri);
+
+            const SpeedList& Speeds() const
+            {
+                 return _speeds;
+            }
             uint32_t Speed(const int32_t speed);
             inline int32_t Speed() const
             {
@@ -121,6 +129,7 @@ namespace Player {
             Exchange::IStream::drmtype _drmType;
             Exchange::IStream::streamtype _streamType;
 
+            SpeedList _speeds;
             int32_t _speed;
             int32_t _rate;
             uint64_t _absoluteTime;
