@@ -451,6 +451,21 @@ namespace Plugin {
                     return (_buffer->Name());
                 }
 
+                DataExchange* getBuffer()
+                {
+                    return  _buffer;
+                }
+
+                std::string KeySystem()
+                {
+                    return _keySystem;
+                }
+
+                CDMi::IMediaKeySession* MediaKeySession()
+                {
+                    return _mediaKeySession;
+                }
+
                 // Loads the data stored for the specified session into the cdm object
                 virtual ::OCDM::OCDM_RESULT Load() override
                 {
@@ -592,6 +607,7 @@ namespace Plugin {
             virtual ~AccessorOCDM()
             {
                 TRACE_L1("Released the AccessorOCDM server side [%d]", __LINE__);
+                DeleteSession();
             }
 
         public:
@@ -1071,24 +1087,25 @@ namespace Plugin {
                 if (session != nullptr) {
 
                     _administrator.ReleaseBuffer(session->BufferId());
-
-                    std::list<SessionImplementation*>::iterator index(_sessionList.begin());
-
-                    while ((index != _sessionList.end()) && (session != (*index))) {
-                        index++;
-                    }
-
-                    ASSERT(index != _sessionList.end());
-
-                    if (index != _sessionList.end()) {
-                        const string sessionId(session->SessionId());
-                        // Before we remove it here, release it.
-                        _sessionList.erase(index);
-                        ReportDestroy(sessionId);
-                    }
+                    ReportDestroy(session->SessionId());
                 }
 
                 _adminLock.Unlock();
+            }
+       public:
+             void DeleteSession()
+             {
+                 _adminLock.Lock();
+
+                 for (auto session = _sessionList.begin(); session != _sessionList.end();) {
+                     Remove(*session, (*session)->KeySystem(), (*session)->MediaKeySession());
+
+                     delete *session;
+                     session = _sessionList.erase(session);
+                     TRACE(Trace::Information, ("Destructed the Session and buffer @ Server side: %p",session));
+                 }
+
+                 _adminLock.Unlock();
             }
 
         private:
@@ -1098,6 +1115,48 @@ namespace Plugin {
             uint32_t _defaultSize;
             std::list<SessionImplementation*> _sessionList;
             std::list<::OCDM::IAccessorOCDM::INotification*> _observers;
+        };
+        class SessionListener : public WPEFramework::RPC::Communicator::RemoteProcess::INotification
+        {
+        public:
+            SessionListener(const SessionListener&) = delete;
+
+        public:
+            explicit SessionListener(::OCDM::IAccessorOCDM* ocdm)
+            {
+                _ocdm = reinterpret_cast<AccessorOCDM*>(ocdm);
+            }
+
+            virtual ~SessionListener()
+            {
+            }
+
+        private:
+            virtual uint32_t Release() const
+            {
+                return 1;
+            }
+
+            virtual void *QueryInterface(const uint32_t interfaceNumber VARIABLE_IS_NOT_USED)
+            {
+                return this;
+            }
+
+            virtual void Activated(WPEFramework::RPC::IRemoteProcess* process)
+            {
+            }
+
+            virtual void Deactivated(WPEFramework::RPC::IRemoteProcess *process VARIABLE_IS_NOT_USED)
+            {
+                _ocdm->DeleteSession();
+            }
+
+        public:
+            virtual void AddRef() const
+            {
+            }
+        private:
+            AccessorOCDM* _ocdm;
         };
 
         class Config : public Core::JSON::Container {
@@ -1277,6 +1336,8 @@ namespace Plugin {
 
             _entryPoint = Core::Service<AccessorOCDM>::Create<::OCDM::IAccessorOCDM>(this, config.SharePath.Value(), config.ShareSize.Value());
             _service = new ExternalAccess(Core::NodeId(config.Connector.Value().c_str()), _entryPoint);
+            _sessionListener = Core::Service<SessionListener>::Create<SessionListener>(_entryPoint);
+            _service->Register(_sessionListener);
 
             if (_service != nullptr) {
 
@@ -1411,6 +1472,7 @@ namespace Plugin {
         std::map<const std::string, SystemFactory> _systemToFactory;
         std::list<Core::Library> _systemLibraries;
         std::list<string> _keySystems;
+        SessionListener* _sessionListener;
 #ifdef _MSVC_LANG
         void* _proxystubs;
 #endif
