@@ -410,12 +410,6 @@ namespace Plugin {
 
                 virtual ~SessionImplementation()
                 {
-
-                    TRACE_L1("Destructing the Session Server side: %p", this);
-                    // this needs to be done in a thread safe way. Leave it up to
-                    // the parent to lock handing out new entries before we clear.
-                    _parent.Remove(this, _keySystem, _mediaKeySession);
-
                     delete _buffer;
 
                     TRACE(Trace::Information, ("Server::Session::~Session(%s,%s) => %p", _keySystem.c_str(), _sessionId.c_str(), this));
@@ -449,11 +443,6 @@ namespace Plugin {
                 virtual std::string BufferIdExt() const override
                 {
                     return (_buffer->Name());
-                }
-
-                DataExchange* getBuffer()
-                {
-                    return  _buffer;
                 }
 
                 std::string KeySystem()
