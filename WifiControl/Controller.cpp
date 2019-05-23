@@ -223,7 +223,8 @@ namespace WPASupplicant {
                     _adminLock.Lock();
 
                     // Let see what we need to do with this BSSID, add or remove :-)
-                    if ((event == CTRL_EVENT_BSS_ADDED) && (_detailRequest.Set(bssid) == true)) {
+                    if ((std::find(_requests.begin(), _requests.end(), &_detailRequest) == _requests.end()) &&
+                        (event == CTRL_EVENT_BSS_ADDED) && (_detailRequest.Set(bssid) == true)) {
                         // send out a request for detail.
                         Submit(&_detailRequest);
                     } else if (event == CTRL_EVENT_BSS_REMOVED) {
