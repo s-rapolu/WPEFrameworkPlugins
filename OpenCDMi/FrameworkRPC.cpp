@@ -70,6 +70,11 @@ namespace Plugin {
                 return (result);
             }
 
+            void Offer(const uint32_t processId, Core::IUnknown* /* remote */, const uint32_t /* interfaceId */) override
+            {
+                reinterpret_cast<AccessorOCDM*>(_parentInterface)->ClientProcessID(processId);
+            }
+
         private:
             ::OCDM::IAccessorOCDM* _parentInterface;
         };
@@ -694,6 +699,7 @@ namespace Plugin {
                                 _adminLock.Lock();
 
                                 _sessionList.push_front(newEntry);
+                                _pidSessionMap[_clientProcessId].push_front(newEntry);
                                 ReportCreate(sessionId);
 
                                 _adminLock.Unlock();
@@ -780,6 +786,7 @@ namespace Plugin {
                                 _adminLock.Lock();
 
                                 _sessionList.push_front(newEntry);
+                                _pidSessionMap[_clientProcessId].push_front(newEntry);
 
                                 ReportCreate(sessionId);
 
@@ -989,6 +996,11 @@ namespace Plugin {
 
                 _adminLock.Unlock();
             }
+            
+            void ClientProcessID(uint32_t processId)
+            {
+                _clientProcessId = processId;
+            }
 
             BEGIN_INTERFACE_MAP(AccessorOCDM)
             INTERFACE_ENTRY(::OCDM::IAccessorOCDM)
@@ -1090,6 +1102,22 @@ namespace Plugin {
 
                 _adminLock.Unlock();
             }
+       public:
+             void DeleteSession(uint32_t pid)
+             {
+                 _adminLock.Lock();
+
+                 for(auto& session : _pidSessionMap[pid]) {
+
+                     auto index = std::find(_sessionList.begin(), _sessionList.end(), session);
+                     if (index != _sessionList.end()) {
+                         delete session;
+                         TRACE(Trace::Information, ("Destructed the Session and buffer @ Server side: %p",session));
+                     }
+                 }
+                 _pidSessionMap.erase(pid);
+                 _adminLock.Unlock();
+            }
 
         private:
             OCDMImplementation& _parent;
@@ -1098,6 +1126,51 @@ namespace Plugin {
             uint32_t _defaultSize;
             std::list<SessionImplementation*> _sessionList;
             std::list<::OCDM::IAccessorOCDM::INotification*> _observers;
+            uint32_t _clientProcessId;
+            std::map<uint32_t, std::list<SessionImplementation*>> _pidSessionMap;
+        };
+
+        class SessionListener : public WPEFramework::RPC::Communicator::RemoteProcess::INotification {
+        public:
+            SessionListener(const SessionListener&) = delete;
+
+        public:
+            explicit SessionListener(::OCDM::IAccessorOCDM* ocdm)
+            {
+                _ocdm = reinterpret_cast<AccessorOCDM*>(ocdm);
+            }
+
+            virtual ~SessionListener()
+            {
+            }
+
+        private:
+            virtual uint32_t Release() const
+            {
+                return 1;
+            }
+
+            virtual void *QueryInterface(const uint32_t interfaceNumber VARIABLE_IS_NOT_USED)
+            {
+                return this;
+            }
+
+            virtual void Activated(WPEFramework::RPC::IRemoteProcess* process)
+            {
+            }
+
+            virtual void Deactivated(WPEFramework::RPC::IRemoteProcess *process)
+            {
+                _ocdm->DeleteSession(process->Id());
+            }
+
+        public:
+            virtual void AddRef() const
+            {
+            }
+
+        private:
+            AccessorOCDM* _ocdm;
         };
 
         class Config : public Core::JSON::Container {
@@ -1277,6 +1350,8 @@ namespace Plugin {
 
             _entryPoint = Core::Service<AccessorOCDM>::Create<::OCDM::IAccessorOCDM>(this, config.SharePath.Value(), config.ShareSize.Value());
             _service = new ExternalAccess(Core::NodeId(config.Connector.Value().c_str()), _entryPoint);
+            _sessionListener = Core::Service<SessionListener>::Create<SessionListener>(_entryPoint);
+            _service->Register(_sessionListener);
 
             if (_service != nullptr) {
 
@@ -1411,6 +1486,7 @@ namespace Plugin {
         std::map<const std::string, SystemFactory> _systemToFactory;
         std::list<Core::Library> _systemLibraries;
         std::list<string> _keySystems;
+        SessionListener* _sessionListener;
 #ifdef _MSVC_LANG
         void* _proxystubs;
 #endif
