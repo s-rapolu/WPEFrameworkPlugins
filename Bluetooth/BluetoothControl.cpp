@@ -300,7 +300,7 @@ namespace Plugin {
                     bool passive = options.Boolean(_T("Passive"), false);
                     uint16_t duration = options.Number<uint16_t>(_T("ScanTime"), 10);
                     uint8_t flags = 0;
-                    uint32_t type = 0x338B9E;
+                    uint32_t type = 0x338B9E; //Global Inquiry Access Code (GIAC)
 
                     if (lowEnergy == true) {
                         _application.Scan(duration, limited, passive);

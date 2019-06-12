@@ -496,11 +496,11 @@ namespace Bluetooth {
 
             int ttyValue = N_HCI;
             if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), TIOCSETD, &ttyValue) < 0) {
-                TRACE_L1("Failed direct IOCTL to TIOCSETD, %d", errno);
+                TRACE(Trace::Error, (_T("Failed direct IOCTL to TIOCSETD, %d"),errno));
             } else if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), HCIUARTSETFLAGS, flags) < 0) {
-                TRACE_L1("Failed HCIUARTSETFLAGS. [flags:%d]", flags);
+                TRACE(Trace::Error, (_T("Failed HCIUARTSETFLAGS. [flags:%d]"),flags));
             } else if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), HCIUARTSETPROTO, protocol) < 0) {
-                TRACE_L1("Failed HCIUARTSETPROTO. [protocol:%d]", protocol);
+                TRACE(Trace::Error, (_T("Failed HCIUARTSETPROTO. [protocol:%d]"),protocol));
             } else {
                 return (Core::ERROR_NONE);
             }
@@ -528,7 +528,7 @@ namespace Bluetooth {
         {
             int ttyValue = N_TTY;
             if (::ioctl(static_cast<Core::IResource&>(_port.Link()).Descriptor(), TIOCSETD, &ttyValue) < 0) {
-                TRACE_L1("Failed direct IOCTL to TIOCSETD, %d", errno);
+                TRACE(Trace::Error, (_T("Failed direct IOCTL to TIOCSETD, %d"),errno));
             }
         }
         Core::SerialPort::BaudRate Convert(const uint32_t baudRate)

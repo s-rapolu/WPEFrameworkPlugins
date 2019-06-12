@@ -953,7 +953,11 @@ namespace Bluetooth {
 
                         if (finder == reported.end()) {
                             reported.push_back(newSource);
-                            callback->DiscoveredDevice(false, newSource, _T("[Unknown]"));
+                            char name[248];
+                            memset(name, 0, sizeof(name));
+                            if (!(getDeviceName(address,newSource,name)))
+                                strcpy(name,"[Unknown]");
+                            callback->DiscoveredDevice(false, newSource, name);
                         }
                     }
 
@@ -969,6 +973,27 @@ namespace Bluetooth {
             }
 
             _state.Unlock();
+        }
+
+        bool getDeviceName(bdaddr_t* bdaddr,Address newSource, char (&name) [248])
+        {
+            bool status = false;
+            int dev_id = hci_get_route(bdaddr);
+            if (dev_id < 0) {
+                TRACE(Trace::Error, (_T("Device is not available.")));
+            }
+            int dd = hci_open_dev(dev_id);
+            if (dd < 0) {
+                TRACE(Trace::Error, (_T("HCI Device open failed.")));
+            }
+            if (hci_read_remote_name(dd, bdaddr, sizeof(name), name, 25000) == 0){
+                status = true;
+            } else {
+                status = true;
+                strcpy(name,(newSource.ToString()).c_str());
+            }
+            hci_close_dev(dd);
+            return status;
         }
         void Scan(IScanning* callback, const uint16_t scanTime, const bool limited, const bool passive)
         {

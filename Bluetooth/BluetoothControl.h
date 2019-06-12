@@ -929,6 +929,7 @@ namespace Plugin {
             DeviceRegular(Bluetooth::HCISocket* administrator, Bluetooth::HCISocket* application, const Bluetooth::Address& address, const string& name)
                 : DeviceImpl(administrator, application, false, address, name)
                 , _handle(~0)
+                , _devName(name)
             {
 
                 if (SetState(METADATA) == Core::ERROR_NONE) {
@@ -963,6 +964,7 @@ namespace Plugin {
                     _connect->clock_offset = 0x0000;
                     _connect->role_switch = 0x01;
                     result = Send(MAX_ACTION_TIMEOUT, this, CONNECTING, _connect);
+                    sleep(5);
                 }
 
                 return (result);
@@ -987,6 +989,7 @@ namespace Plugin {
             virtual void Updated(const Core::IOutbound& data, const uint32_t error_code) override
             {
                 if (data.Id() == Bluetooth::HCISocket::Command::RemoteName::ID) {
+#if 0 //Commented since name is already in hand.
                     // Metadata is flowing in, handle it..
                     // _cmds.name.Response().bdaddr;
                     const char* longName = reinterpret_cast<const char*>(_name.Response().name);
@@ -1002,6 +1005,9 @@ namespace Plugin {
 
                     SetName(std::string(longName, index));
                     TRACE(Trace::Information, (_T("Loaded Long Device Name: %s"),longName));
+#endif
+                    SetName(_devName.c_str());
+                    TRACE(Trace::Information, (_T("Loaded Device name :[%s]"),_devName.c_str()));
                     ClearState(METADATA);
                 } else if (data.Id() == Bluetooth::HCISocket::Command::Connect::ID) {
                     TRACE(Trace::Information, (_T("Connected")));
@@ -1026,6 +1032,7 @@ namespace Plugin {
             Bluetooth::HCISocket::Command::Connect _connect;
             Bluetooth::HCISocket::Command::Disconnect _disconnect;
             Bluetooth::HCISocket::Command::RemoteName _name;
+            string _devName;
         };
 
         class EXTERNAL DeviceLowEnergy : public DeviceImpl, Core::IOutbound::ICallback {
