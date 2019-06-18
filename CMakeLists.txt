@@ -14,6 +14,7 @@ option(PLUGIN_DSRESOLUTION "Include DSResolution plugin" OFF)
 option(PLUGIN_DHCPSERVER "Include DHCPServer plugin" OFF)
 option(PLUGIN_DIALSERVER " Include DIALServer plugin" OFF)
 option(PLUGIN_DICTIONARY "Include Dictionary plugin" OFF)
+option(PLUGIN_DROPBEARSERVER "Include DropbearServer plugin" OFF)
 option(PLUGIN_IOCONNECTOR "Include IOConnector plugin" OFF)
 option(PLUGIN_FRONTPANEL "Include FrontPanel plugin" OFF)
 option(PLUGIN_LOCATIONSYNC "Include LocationSync plugin" OFF)
@@ -64,6 +65,10 @@ endif()
 
 if(PLUGIN_DEVICEINFO)
     add_subdirectory(DeviceInfo)
+endif()
+
+if(PLUGIN_DROPBEARSERVER)
+    add_subdirectory(DropbearServer)
 endif()
 
 if(PLUGIN_DSRESOLUTION)
